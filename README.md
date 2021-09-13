@@ -5,7 +5,7 @@ BSManager is a small portable utility to switch automatically on and off the Viv
 
 It does support all Pimax models and the Vive Pro headsets.
 
-Currently supports only Base Statiosn v1.
+Currently supports only Base Stations v1.
 
 
 ## **USE AT YOUR OWN RISK**
