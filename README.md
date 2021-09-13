@@ -13,11 +13,13 @@ Currently supports only Base Statiosn v1.
 
 ## Installation
 
-It's a portable application. The only pre-requisite is the Desktop Runtime for .NET Core 5.0.9 (https://versionsof.net/core/5.0/5.0.9/)
+It's a portable application. The only software pre-requisite is the Desktop Runtime for .NET Core 5.0.9 (https://versionsof.net/core/5.0/5.0.9/)
 
 Move it into a permanent directory, you can create a shortcut to launch it or use the drop down menu option to create it on the desktop.
 
-If you wish in the dropdown menu you can also select "Run at Startup"" and it will be run at every current user logon.
+If you wish in the dropdown menu you can also select "Run at Startup" and it will be run at every current user logon.
+
+To control the Base Stations you need a BLE adapter and pair the Base Stations in Windows (their name starts with "HTC BS "). The HeadSet Bluetooth adapter can't used.
 
 
 ## Usage
