@@ -390,6 +390,7 @@ namespace BSManager
                     if (bslist.Count > 0) _doDisco = false;
                 }
                 idx++;
+                await Task.Delay(2500);
             }
             ChangeDiscoStrip();
         }

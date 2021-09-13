@@ -89,6 +89,7 @@
 
   <PropertyGroup>
     <PublishReadyToRun>true</PublishReadyToRun>
+    <Version>1.0.1</Version>
   </PropertyGroup>
   
 </Project>
