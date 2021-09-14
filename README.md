@@ -26,6 +26,10 @@ To control the Base Stations you need a BLE adapter and pair the Base Stations i
 
 There's no main window, only the dropdown menu accessible clicking with right mouse button on the system tray icon.
 
+
+![alt text](https://raw.githubusercontent.com/mann1x/master/BSManager/BSManager/BSManager_tray.png)
+
+
 You can check the BS discovered, the HMD status, configure the startup, the Steam VR DB and send a sleep command.
 
 At startup if the HMD is found active the software will send the base stations a wakeup command.
