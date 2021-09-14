@@ -85,7 +85,7 @@ namespace BSManager
             // ToolStripMenuItemDisco
             // 
             this.ToolStripMenuItemDisco.Name = "ToolStripMenuItemDisco";
-            this.ToolStripMenuItemDisco.Size = new System.Drawing.Size(180, 22);
+            this.ToolStripMenuItemDisco.Size = new System.Drawing.Size(144, 22);
             this.ToolStripMenuItemDisco.Text = "Discovered: 0";
             // 
             // hMDToolStripMenuItem

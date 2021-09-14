@@ -30,8 +30,12 @@ namespace BSManager
     public partial class Form1 : Form
 
     {
+        System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
 
+
+        static StringBuilder sbError = new StringBuilder();
         static int bsCount = 0;
+
         static List<string> bslist = new List<string>();
         static IEnumerable<JToken> bsSerials;
 
@@ -73,11 +77,16 @@ namespace BSManager
         static bool _primed = false;
         static bool _doWork = true;
 
-        static TimeSpan _timeout = TimeSpan.FromSeconds(3);
+        static int _loopRetries = 20;
+        static int _cmdRetries = 10;
+
+        static TimeSpan _timeout = TimeSpan.FromSeconds(5);
 
         static string steamvr_lhjson;
 
         static bool lhfound = false;
+
+        private TextWriterTraceListener traceEx = new TextWriterTraceListener("BSManager_exceptions.log", "BSManager");
 
         public Form1()
         {
@@ -86,8 +95,22 @@ namespace BSManager
 
             InitializeComponent();
 
+            Application.ApplicationExit += delegate { notifyIcon1.Dispose(); };
         }
 
+        private void HandleEx(Exception ex)
+        {
+            notifyIcon1.ShowBalloonTip(1000, null, ex.ToString(), ToolTipIcon.Error);
+            string errStamp = DateTime.Now.ToString();
+            string errMsg = ex.ToString();
+            traceEx.WriteLine($"[{errStamp}] {errMsg}");
+            traceEx.Flush();
+        }
+        static private void sHandleEx(Exception ex)
+        {
+            var form1 = new Form1();
+            form1.HandleEx(ex);
+        }
         private void USBDiscovery()
         {
             try
@@ -107,11 +130,12 @@ namespace BSManager
                 }
 
                 collection.Dispose();
+
                 return;
             }
             catch (Exception ex)
             {
-                Trace.WriteLine(ex);
+                HandleEx(ex);
             }
         }
 
@@ -123,18 +147,20 @@ namespace BSManager
                 {
                     Trace.WriteLine(" PIMAX HMD ON ");
                     ChangeHMDStrip("PIMAX ON ");
+                    this.notifyIcon1.Icon = Resource1.bsmanager_on;
                     BS_cmd("wakeup");
                 }
                 if (did.Contains("VID_2996&PID_0309"))
                 {
                     Trace.WriteLine(" VIVE PRO HMD ON ");
                     ChangeHMDStrip("VIVE PRO ON ");
+                    this.notifyIcon1.Icon = Resource1.bsmanager_on;
                     BS_cmd("wakeup");
                 }
             }
             catch (Exception ex)
             {
-                Trace.WriteLine(ex);
+                HandleEx(ex);
             }
         }
 
@@ -146,18 +172,20 @@ namespace BSManager
                 {
                     Trace.WriteLine(" PIMAX HMD OFF ");
                     ChangeHMDStrip("PIMAX OFF ");
+                    this.notifyIcon1.Icon = ((System.Drawing.Icon)(resources.GetObject("notifyIcon1.Icon")));
                     BS_cmd("sleep");
                 }
                 if (did.Contains("VID_2996&PID_0309"))
                 {
                     Trace.WriteLine(" VIVE PRO HMD OFF ");
                     ChangeHMDStrip("VIVE PRO OFF ");
+                    this.notifyIcon1.Icon = ((System.Drawing.Icon)(resources.GetObject("notifyIcon1.Icon")));
                     BS_cmd("sleep");
                 }
             }
             catch (Exception ex)
             {
-                Trace.WriteLine(ex);
+                HandleEx(ex);
             }
 
         }
@@ -181,7 +209,7 @@ namespace BSManager
             }
             catch (Exception ex)
             {
-                Trace.WriteLine(ex);
+                HandleEx(ex);
             }
         }
 
@@ -201,7 +229,7 @@ namespace BSManager
             }
             catch (Exception ex)
             {
-                Trace.WriteLine(ex);
+                HandleEx(ex);
             }
         }
 
@@ -292,7 +320,7 @@ namespace BSManager
             }
             catch (Exception ex)
             {
-                Trace.WriteLine(ex);
+                HandleEx(ex);
             }
         }
 
@@ -311,7 +339,7 @@ namespace BSManager
             }
             catch (Exception ex)
             {
-                Trace.WriteLine(ex);
+                HandleEx(ex);
             }
         }
         private bool Read_SteamVR_config()
@@ -337,7 +365,7 @@ namespace BSManager
             }
             catch (Exception ex)
             {
-                Trace.WriteLine(ex);
+                HandleEx(ex);
                 return false;
             }
         }
@@ -362,62 +390,148 @@ namespace BSManager
 
 
                 }
-                return false;
             }
-            catch (Exception ex)  //just for demonstration...it's always best to handle specific exceptions
+            catch (Exception ex)
             {
-                Trace.WriteLine("ERROR=" + ex);
-                //react appropriately
+                HandleEx(ex);
                 return false;
             }
         }
 
         private async void BS_discover()
         {
-            bool _doDisco = true;
-            int idx = 0;
-            while (_doDisco && idx < 21) { 
-                bslist.Clear();
-                await Process_cmd("list");
-                await Process_cmd("close");
-                Trace.WriteLine("BSCOUNT=" + bsCount.ToString());
-                Trace.WriteLine("BSLIST=" + bslist.Count.ToString());
-                if (bsCount > 0)
-                {
-                    if (bsCount == bslist.Count) _doDisco = false;
-                } else
-                {
-                    if (bslist.Count > 0) _doDisco = false;
+            try { 
+                bool _doDisco = true;
+                int idx = 0;
+                while (_doDisco && idx < 21) { 
+                    bslist.Clear();
+                    await Process_cmd("list");
+                    Trace.WriteLine("BSCOUNT=" + bsCount.ToString());
+                    Trace.WriteLine("BSLIST=" + bslist.Count.ToString());
+                    if (bsCount > 0)
+                    {
+                        if (bsCount == bslist.Count) _doDisco = false;
+                    } else
+                    {
+                        if (bslist.Count > 0) _doDisco = false;
+                    }
+                    idx++;
+                    await Task.Delay(2500);
                 }
-                idx++;
-                await Task.Delay(2500);
+                ChangeDiscoStrip();
+                if (bsCount == 0)
+                    notifyIcon1.ShowBalloonTip(1000, null, "Found " + bsCount.ToString() + " base stations", ToolTipIcon.Error);
             }
-            ChangeDiscoStrip();
+            catch (Exception ex)
+            {
+                HandleEx(ex);
+            }    
         }
 
         private async void BS_cmd(string action)
         {
-
-            try { 
+            try {
                 foreach (string bs in bslist) {
-                
+
                     await Process_cmd("format hex");
-                    await Process_cmd("open " + bs);
-                    await Process_cmd("set 51968");
-                    if (action == "wakeup")
+
+                    int cmdRetries = 0;
+                    int loopRetries = 0;
+
+                    async Task cmdPump(string cmdType, string action)
                     {
-                        await Process_cmd("write 51969 12 00 00 28 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00");
+                        cmdRetries = 0;
+                        while (cmdRetries <= _cmdRetries)
+                        {
+                            sbError.Clear();
+                            string cmdStr = "";
+
+                            switch (cmdType) { 
+                                case "OPEN":
+                                    await Process_cmd("close");
+                                    await Task.Delay(200);
+                                    cmdStr = "open " + bs;
+                                    break;
+                                case "SET":
+                                    cmdStr = "set 51968";
+                                    break;
+                                case "WRITE":
+                                    if (action == "wakeup")
+                                    {
+                                        cmdStr = "write 51969 12 00 00 28 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00";
+                                    }
+                                    else
+                                    {
+                                        cmdStr = "write 51969 12 01 00 28 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00";
+                                    }
+                                    break;
+                            }
+                            await Process_cmd(cmdStr);
+                            await Task.Delay(200);
+
+                            if (sbError.Length > 0)
+                            {
+                                sbError.Insert(0, cmdType + ": ");
+                                cmdRetries++;
+                                await Task.Delay(1000);
+                            }
+                            else
+                            {
+                                cmdRetries = _cmdRetries + 1;
+                            }
+                        }
+
                     }
-                    else
+
+
+                    loopRetries = 0;
+                    while (loopRetries <= _loopRetries)
                     {
-                        await Process_cmd("write 51969 12 01 00 28 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00");
+
+                        Trace.WriteLine("## " + bs + " loop " + loopRetries.ToString() + "/" + _loopRetries.ToString());
+                        
+                        sbError.Clear();
+
+                        await cmdPump("OPEN", "");
+
+                        if (sbError.Length < 1)
+                        {
+
+                            await cmdPump("SET", "");
+
+                            if (sbError.Length < 1)
+                            {
+                                await cmdPump("WRITE", action);
+                            }
+                        }
+
+                        if (sbError.Length > 0)
+                        {
+                            loopRetries++;
+                            await Task.Delay(1000);
+                        }
+                        else
+                        {
+                            loopRetries = _loopRetries + 1;
+                        }
                     }
-                    await Process_cmd("close");
+
+                    if (sbError.Length > 0)
+                    {
+                        sbError.Insert(0, bs + ":\n");
+                        notifyIcon1.ShowBalloonTip(5000, null, sbError.ToString(), ToolTipIcon.Error);
+                        Trace.WriteLine("## " + bs + " ERROR");
+                    }
+
+                    Trace.WriteLine("## " + bs + " DONE");
+
+                    _deviceList.TrimExcess();
                 }
             }
-            catch(Exception ex)
+
+            catch (Exception ex)
             {
-                Trace.WriteLine(ex);
+                HandleEx(ex);
             }
 
         }
@@ -485,20 +599,17 @@ namespace BSManager
                         }
                     }
                 }
-                catch (Exception error)
+                catch (Exception ex)
                 {
-                    Trace.WriteLine(error.Message);
+                    sHandleEx(ex);
                 }
 
                 if (cmd.Equals("write") || cmd.Equals("w"))
-                    Thread.Sleep(200);
+                    await Task.Delay(200);
 
                 if (!_forEachExecution && cmdStr == string.Empty)
                     _doWork = false;
 
-                Trace.WriteLine("CMDSTR=" + cmdStr);
-                _deviceList.Clear();
-                _deviceList.TrimExcess();
             }
         }
 
@@ -893,13 +1004,13 @@ namespace BSManager
                         }
                         else
                         {
-                            Trace.WriteLine($"Device {deviceName} is unreachable.");
+                            sbError.Append($"Device {deviceName} is unreachable.");
                             retVal += 1;
                         }
                     }
                     catch
                     {
-                        Trace.WriteLine($"Device {deviceName} is unreachable.");
+                        sbError.Append($"Device {deviceName} is unreachable.");
                         retVal += 1;
                     }
                 }
@@ -910,7 +1021,7 @@ namespace BSManager
             }
             else
             {
-                Trace.WriteLine("Device name can not be empty.");
+                sbError.Append("Device name can not be empty.");
                 retVal += 1;
             }
             return retVal;
@@ -981,44 +1092,44 @@ namespace BSManager
                                     }
                                     else
                                     {
-                                        Trace.WriteLine("Service don't have any characteristic.");
+                                        sbError.Append("Service don't have any characteristic.");
                                         retVal += 1;
                                     }
                                 }
                                 else
                                 {
-                                    Trace.WriteLine("Error accessing service.");
+                                    sbError.Append("Error accessing service.");
                                     retVal += 1;
                                 }
                             }
                             // Not granted access
                             else
                             {
-                                Trace.WriteLine("Error accessing service.");
+                                sbError.Append("Error accessing service.");
                                 retVal += 1;
                             }
                         }
                         catch (Exception ex)
                         {
-                            Trace.WriteLine($"Restricted service. Can't read characteristics: {ex.Message}");
+                            sbError.Append($"Restricted service. Can't read characteristics: {ex.Message}");
                             retVal += 1;
                         }
                     }
                     else
                     {
-                        Trace.WriteLine("Invalid service name or number");
+                        sbError.Append("Invalid service name or number");
                         retVal += 1;
                     }
                 }
                 else
                 {
-                    Trace.WriteLine("Invalid service name or number");
+                    sbError.Append("Invalid service name or number");
                     retVal += 1;
                 }
             }
             else
             {
-                Trace.WriteLine("Nothing to use, no BLE device connected.");
+                sbError.Append("Nothing to use, no BLE device connected.");
                 retVal += 1;
             }
 
@@ -1065,7 +1176,7 @@ namespace BSManager
                             }
                             catch (Exception ex)
                             {
-                                Trace.WriteLine($"Restricted service. Can't read characteristics: {ex.Message}");
+                                sbError.Append($"Restricted service. Can't read characteristics: {ex.Message}");
                                 retVal += 1;
                             }
 
@@ -1097,31 +1208,31 @@ namespace BSManager
                                 Trace.WriteLine(Utilities.FormatValue(result.Value, _dataFormat));
                             else
                             {
-                                Trace.WriteLine($"Read failed: {result.Status}");
+                                sbError.Append($"Read failed: {result.Status}");
                                 retVal += 1;
                             }
                         }
                         else
                         {
-                            Trace.WriteLine($"Invalid characteristic {charName}");
+                            sbError.Append($"Invalid characteristic {charName}");
                             retVal += 1;
                         }
                     }
                     else
                     {
-                        Trace.WriteLine("Nothing to read, please specify characteristic name or #.");
+                        sbError.Append("Nothing to read, please specify characteristic name or #.");
                         retVal += 1;
                     }
                 }
                 else
                 {
-                    Trace.WriteLine("Nothing to read, please specify characteristic name or #.");
+                    sbError.Append("Nothing to read, please specify characteristic name or #.");
                     retVal += 1;
                 }
             }
             else
             {
-                Trace.WriteLine("No BLE device connected.");
+                sbError.Append("No BLE device connected.");
                 retVal += 1;
             }
             return retVal;
@@ -1153,7 +1264,7 @@ namespace BSManager
                     var parts = param.Split(' ');
                     if (parts.Length < 2)
                     {
-                        Trace.WriteLine("Insufficient data for write, please provide characteristic name and data.");
+                        sbError.Append("Insufficient data for write, please provide characteristic name and data.");
                         retVal += 1;
                         return retVal;
                     }
@@ -1162,7 +1273,7 @@ namespace BSManager
                     string data = param.Substring(parts[0].Length + 1);
                     if (string.IsNullOrEmpty(data))
                     {
-                        Trace.WriteLine("Insufficient data for write.");
+                        sbError.Append("Insufficient data for write.");
                         retVal += 1;
                         return retVal;
                     }
@@ -1198,7 +1309,7 @@ namespace BSManager
                                 }
                                 catch (Exception ex)
                                 {
-                                    Trace.WriteLine($"Restricted service. Can't read characteristics: {ex.Message}");
+                                    sbError.Append($"Restricted service. Can't read characteristics: {ex.Message}");
                                     retVal += 1;
                                     return retVal;
                                 }
@@ -1208,7 +1319,7 @@ namespace BSManager
                         {
                             if (_selectedService == null)
                             {
-                                Trace.WriteLine("No service is selected.");
+                                sbError.Append("No service is selected.");
                                 retVal += 1;
                             }
                             chars = new List<BluetoothLEAttributeDisplay>(_characteristics);
@@ -1226,32 +1337,32 @@ namespace BSManager
                                 GattWriteResult result = await attr.characteristic.WriteValueWithResultAsync(buffer);
                                 if (result.Status != GattCommunicationStatus.Success)
                                 {
-                                    Trace.WriteLine($"Write failed: {result.Status}");
+                                    sbError.Append($"Write failed: {result.Status}");
                                     retVal += 1;
                                 }
                             }
                             else
                             {
-                                Trace.WriteLine($"Invalid characteristic {charName}");
+                                sbError.Append($"Invalid characteristic {charName}");
                                 retVal += 1;
                             }
                         }
                         else
                         {
-                            Trace.WriteLine("Please specify characteristic name or # for writing.");
+                            sbError.Append("Please specify characteristic name or # for writing.");
                             retVal += 1;
                         }
                     }
                     else
                     {
-                        Trace.WriteLine("Incorrect data format.");
+                        sbError.Append("Incorrect data format.");
                         retVal += 1;
                     }
                 }
             }
             else
             {
-                Trace.WriteLine("No BLE device connected.");
+                sbError.Append("No BLE device connected.");
                 retVal += 1;
             }
             return retVal;
@@ -1468,7 +1579,7 @@ namespace BSManager
             }
             catch (Exception ex)
             {
-                Trace.WriteLine(ex);
+                HandleEx(ex);
             }
         }
 

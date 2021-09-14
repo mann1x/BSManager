@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <None Remove="bsmanager.ico" />
+    <None Remove="bsmanager_on.ico" />
     <COMReference Include="IWshRuntimeLibrary">
       <WrapperTool>tlbimp</WrapperTool>
       <VersionMinor>0</VersionMinor>
@@ -79,17 +80,18 @@
     </None>
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Resources\" />
-  </ItemGroup>
-
   <PropertyGroup>
     <OutputType>Exe</OutputType>
   </PropertyGroup>
 
   <PropertyGroup>
     <PublishReadyToRun>true</PublishReadyToRun>
-    <Version>1.0.1</Version>
+    <Version>1.2.0</Version>
+    <Copyright>ManniX</Copyright>
+    <Description>VR Base Stations Manager for Pimax and Vive Pro HeadSets</Description>
+    <PackageProjectUrl>https://github.com/mann1x/BSManager</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/mann1x/BSManager</RepositoryUrl>
+    <RepositoryType>GitHub</RepositoryType>
   </PropertyGroup>
   
 </Project>
