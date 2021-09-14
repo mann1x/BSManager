@@ -433,6 +433,10 @@ namespace BSManager
             try {
                 foreach (string bs in bslist) {
 
+                    string pattern = @"HTC BS(\s.*)";
+                    string patternv2 = @"LHB-(\s.*)";
+
+
                     await Process_cmd("format hex");
 
                     int cmdRetries = 0;
@@ -453,17 +457,43 @@ namespace BSManager
                                     cmdStr = "open " + bs;
                                     break;
                                 case "SET":
-                                    cmdStr = "set 51968";
+                                    Match sm = Regex.Match(bs, pattern);
+                                    if (sm.Success)
+                                    {
+                                        cmdStr = "set 51968";
+                                    }
+                                    Match sm2 = Regex.Match(bs, patternv2);
+                                    if (sm2.Success)
+                                    {
+                                        cmdStr = "set 00001523-1212-efde-1523-785feabcd124";
+                                    }
                                     break;
                                 case "WRITE":
-                                    if (action == "wakeup")
+                                    Match wm = Regex.Match(bs, pattern);
+                                    if (wm.Success)
                                     {
-                                        cmdStr = "write 51969 12 00 00 28 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00";
+                                        if (action == "wakeup")
+                                        {
+                                            cmdStr = "write 51969 12 00 00 28 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00";
+                                        }
+                                        else
+                                        {
+                                            cmdStr = "write 51969 12 01 00 28 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00";
+                                        }
                                     }
-                                    else
+                                    Match wm2 = Regex.Match(bs, patternv2);
+                                    if (wm2.Success)
                                     {
-                                        cmdStr = "write 51969 12 01 00 28 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00";
+                                        if (action == "wakeup")
+                                        {
+                                            cmdStr = "write 00001523-1212-efde-1523-785feabcd124 01";
+                                        }
+                                        else
+                                        {
+                                            cmdStr = "write 00001523-1212-efde-1523-785feabcd124 00";
+                                        }
                                     }
+
                                     break;
                             }
                             await Process_cmd(cmdStr);
@@ -900,6 +930,7 @@ namespace BSManager
             var names = _deviceList.OrderBy(d => d.Name).Where(d => !string.IsNullOrEmpty(d.Name)).Select(d => d.Name).ToList();
             
             string pattern = @"HTC BS(\s.*)";
+            string patternv2 = @"LHB-(\s.*)";
 
             for (int i = 0; i < names.Count; i++) { 
                   
@@ -909,6 +940,15 @@ namespace BSManager
                     bslist.Add(names[i].ToString());
 
                 }
+
+                Match mv2 = Regex.Match(names[i].ToString(), patternv2);
+                if (mv2.Success)
+                {
+                    Trace.WriteLine($"FOUND BASESTATION={names[i]}");
+                    bslist.Add(names[i].ToString());
+
+                }
+
 
                 Trace.WriteLine($"#{i:00}: {names[i]}");
             }
