@@ -43,4 +43,4 @@ Almost all excellent BLEConsole from SeNSSoFT is included for easy troubleshooti
 
 ## Compilation
 
-You can compile with Visual Studio 2019 and .NET Core 5.
+You can compile with Visual Studio 2019 and .NET 5.
