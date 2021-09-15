@@ -44,3 +44,22 @@ Almost all excellent BLEConsole from SeNSSoFT is included for easy troubleshooti
 ## Compilation
 
 You can compile with Visual Studio 2019 and .NET 5.
+
+## Changelog:
+
+- v1.2.1
+    - New: Added blind experimental Base Stations v2 support
+- v1.2.0
+    - New: Added mutex for only one instance active
+    - Fix: Fixed critical bug, mistake on BT devicelist trim
+    - New: Cycling through command retries and looping the whole command sequence
+    - New: Added error and exception management
+    - New: Exceptions are now saved in a log file
+    - New: Implemented tooltip balloons to display error messages
+    - New: Tray icon will display HeadSet status via a green dot, means active
+    - Fix: Fixed BT commands loop with close (open should disconnected previously connected device but seems not doing it)
+    - Fix: Other small fixes    
+- v1.0.1
+    - New: Introduced a wait of 2.5 seconds between BLE discovery cycles to wait for BLE adapter to be available at system startup 
+- v1.0.0
+    - Initial release
