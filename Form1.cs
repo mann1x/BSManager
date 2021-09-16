@@ -469,7 +469,7 @@ namespace BSManager
                 foreach (string bs in bslist) {
 
                     string pattern = @"HTC BS(\s.*)";
-                    string patternv2 = @"LHB-(\s.*)";
+                    string patternv2 = @"LHB-(.*)";
 
 
                     await Process_cmd("format hex");
@@ -965,7 +965,7 @@ namespace BSManager
             var names = _deviceList.OrderBy(d => d.Name).Where(d => !string.IsNullOrEmpty(d.Name)).Select(d => d.Name).ToList();
             
             string pattern = @"HTC BS(\s.*)";
-            string patternv2 = @"LHB-(\s.*)";
+            string patternv2 = @"LHB-(.*)";
 
             for (int i = 0; i < names.Count; i++) { 
                   

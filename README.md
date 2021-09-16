@@ -47,6 +47,8 @@ You can compile with Visual Studio 2019 and .NET 5.
 
 ## Changelog:
 
+- v1.2.4
+    - Fix: Bug in BS v2 discovery
 - v1.2.3
     - New: Implemented AutoUpdater
 - v1.2.1
