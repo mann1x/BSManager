@@ -1,10 +1,10 @@
 {
-  "version": "1.2.3",
+  "version": "1.2.3.0",
   "url": "https://github.com/mann1x/BSManager/releases/download/1.2.3/BSManager.zip",
   "changelog": "https://github.com/mann1x/BSManager/releases",
   "mandatory": {
     "value": false,
-    "minVersion": "1.2.2",
+    "minVersion": "1.2.2.0",
     "mode": 1
   },
   "checksum": {
