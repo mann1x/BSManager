@@ -247,7 +247,7 @@ namespace BSManager
                 AutoUpdater.RunUpdateAsAdmin = false;
                 AutoUpdater.Synchronous = true;
                 AutoUpdater.ParseUpdateInfoEvent += AutoUpdaterOnParseUpdateInfoEvent;
-                AutoUpdater.Start("https://github.com/mann1x/BSManager/tree/master/BSManager/AutoUpdaterBSManager.json");
+                AutoUpdater.Start("https://raw.githubusercontent.com/mann1x/BSManager/master/BSManager/AutoUpdaterBSManager.json");
 
                 bSManagerVersionToolStripMenuItem.Text = "BSManager Version " + _versionInfo;
 
