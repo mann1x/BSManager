@@ -23,6 +23,7 @@ using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using IWshRuntimeLibrary;
+using AutoUpdaterDotNET;
 
 namespace BSManager
 {
@@ -236,80 +237,114 @@ namespace BSManager
         private void Form1_Load(object sender, EventArgs e)
         {
 
-            var name = Assembly.GetExecutingAssembly().GetName();
-            _versionInfo = string.Format($"{name.Version.Major:0}.{name.Version.Minor:0}.{name.Version.Build:0}");
-
-            bSManagerVersionToolStripMenuItem.Text = "BSManager Version " + _versionInfo;
-
-            RegistryKey registryStart = Registry.CurrentUser.OpenSubKey
-            ("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
-
-            if (registryStart.GetValue("BSManager") == null)
+            try
             {
-                toolStripRunAtStartup.Checked = false;
-            }
-            else
-            {
-                toolStripRunAtStartup.Checked = true;
-            }
+                var name = Assembly.GetExecutingAssembly().GetName();
+                _versionInfo = string.Format($"{name.Version.Major:0}.{name.Version.Minor:0}.{name.Version.Build:0}");
 
-            this.Hide();
+                AutoUpdater.InstalledVersion = new Version(_versionInfo);
+                AutoUpdater.DownloadPath = Application.StartupPath;
+                AutoUpdater.RunUpdateAsAdmin = false;
+                AutoUpdater.Synchronous = true;
+                AutoUpdater.ParseUpdateInfoEvent += AutoUpdaterOnParseUpdateInfoEvent;
+                AutoUpdater.Start("http://https://github.com/mann1x/BSManager/tree/master/BSManager/AutoUpdaterBSManager.json");
 
-            registryStart.Dispose();
-            
-            WqlEventQuery insertQuery = new WqlEventQuery("SELECT * FROM __InstanceCreationEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_USBHub'");
+                bSManagerVersionToolStripMenuItem.Text = "BSManager Version " + _versionInfo;
 
-            ManagementEventWatcher insertWatcher = new ManagementEventWatcher(insertQuery);
-            insertWatcher.EventArrived += new EventArrivedEventHandler(DeviceInsertedEvent);
-            insertWatcher.Start();
+                RegistryKey registryStart = Registry.CurrentUser.OpenSubKey
+                ("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
 
-            WqlEventQuery removeQuery = new WqlEventQuery("SELECT * FROM __InstanceDeletionEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_USBHub'");
-            ManagementEventWatcher removeWatcher = new ManagementEventWatcher(removeQuery);
-            removeWatcher.EventArrived += new EventArrivedEventHandler(DeviceRemovedEvent);
-            removeWatcher.Start();
-
-            var watcher = DeviceInformation.CreateWatcher(_aqsAllBLEDevices, _requestedBLEProperties, DeviceInformationKind.AssociationEndpoint);
-            watcher.Added += (DeviceWatcher sender, DeviceInformation devInfo) =>
-            {
-                if (_deviceList.FirstOrDefault(d => d.Id.Equals(devInfo.Id) || d.Name.Equals(devInfo.Name)) == null) _deviceList.Add(devInfo);
-            };
-            watcher.Updated += (_, __) => { }; // We need handler for this event, even an empty!
-
-            //Watch for a device being removed by the watcher
-            //watcher.Removed += (DeviceWatcher sender, DeviceInformationUpdate devInfo) =>
-            //{
-            //    _deviceList.Remove(FindKnownDevice(devInfo.Id));
-            //};
-
-            watcher.EnumerationCompleted += (DeviceWatcher sender, object arg) => { sender.Stop(); };
-            watcher.Stopped += (DeviceWatcher sender, object arg) => { _deviceList.Clear(); sender.Start(); };
-            watcher.Start();
-
-            lhfound = Read_SteamVR_config();
-            if (!lhfound)
-            {
-                SteamDBToolStripMenuItem.Text = "SteamVR DB not found in registry";
-            }
-            else
-            {
-                lhfound = Load_LH_DB();
-                if (!lhfound) { SteamDBToolStripMenuItem.Text = "SteamVR DB file parse error"; } 
+                if (registryStart.GetValue("BSManager") == null)
+                {
+                    toolStripRunAtStartup.Checked = false;
+                }
                 else
                 {
-                    SteamDBToolStripMenuItem.Text = "Serials:";
-                    foreach (string bs in bsSerials)
+                    toolStripRunAtStartup.Checked = true;
+                }
+
+                this.Hide();
+
+                registryStart.Dispose();
+            
+                WqlEventQuery insertQuery = new WqlEventQuery("SELECT * FROM __InstanceCreationEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_USBHub'");
+
+                ManagementEventWatcher insertWatcher = new ManagementEventWatcher(insertQuery);
+                insertWatcher.EventArrived += new EventArrivedEventHandler(DeviceInsertedEvent);
+                insertWatcher.Start();
+
+                WqlEventQuery removeQuery = new WqlEventQuery("SELECT * FROM __InstanceDeletionEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_USBHub'");
+                ManagementEventWatcher removeWatcher = new ManagementEventWatcher(removeQuery);
+                removeWatcher.EventArrived += new EventArrivedEventHandler(DeviceRemovedEvent);
+                removeWatcher.Start();
+
+                var watcher = DeviceInformation.CreateWatcher(_aqsAllBLEDevices, _requestedBLEProperties, DeviceInformationKind.AssociationEndpoint);
+                watcher.Added += (DeviceWatcher sender, DeviceInformation devInfo) =>
+                {
+                    if (_deviceList.FirstOrDefault(d => d.Id.Equals(devInfo.Id) || d.Name.Equals(devInfo.Name)) == null) _deviceList.Add(devInfo);
+                };
+                watcher.Updated += (_, __) => { }; // We need handler for this event, even an empty!
+
+                //Watch for a device being removed by the watcher
+                //watcher.Removed += (DeviceWatcher sender, DeviceInformationUpdate devInfo) =>
+                //{
+                //    _deviceList.Remove(FindKnownDevice(devInfo.Id));
+                //};
+
+                watcher.EnumerationCompleted += (DeviceWatcher sender, object arg) => { sender.Stop(); };
+                watcher.Stopped += (DeviceWatcher sender, object arg) => { _deviceList.Clear(); sender.Start(); };
+                watcher.Start();
+
+                lhfound = Read_SteamVR_config();
+                if (!lhfound)
+                {
+                    SteamDBToolStripMenuItem.Text = "SteamVR DB not found in registry";
+                }
+                else
+                {
+                    lhfound = Load_LH_DB();
+                    if (!lhfound) { SteamDBToolStripMenuItem.Text = "SteamVR DB file parse error"; } 
+                    else
                     {
-                        steamVRLHDBToolStripMenuItem.DropDownItems.Add(bs);
-                    }
-                }                
+                        SteamDBToolStripMenuItem.Text = "Serials:";
+                        foreach (string bs in bsSerials)
+                        {
+                            steamVRLHDBToolStripMenuItem.DropDownItems.Add(bs);
+                        }
+                    }                
+                }
+
+                BS_discover();
+
+                USBDiscovery();
+            }
+            catch (Exception ex)
+            {
+                HandleEx(ex);
             }
 
-            BS_discover();
-
-            USBDiscovery();
-
         }
-
+        private void AutoUpdaterOnParseUpdateInfoEvent(ParseUpdateInfoEventArgs args)
+        {
+            dynamic json = JsonConvert.DeserializeObject(args.RemoteData);
+            args.UpdateInfo = new UpdateInfoEventArgs
+            {
+                CurrentVersion = json.version,
+                ChangelogURL = json.changelog,
+                DownloadURL = json.url,
+                Mandatory = new Mandatory
+                {
+                    Value = json.mandatory.value,
+                    UpdateMode = json.mandatory.mode,
+                    MinimumVersion = json.mandatory.minVersion
+                },
+                CheckSum = new CheckSum
+                {
+                    Value = json.checksum.value,
+                    HashingAlgorithm = json.checksum.hashingAlgorithm
+                }
+            };
+        }
         private void ChangeHMDStrip(string label)
         {
             try
