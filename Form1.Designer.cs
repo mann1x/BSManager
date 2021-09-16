@@ -72,14 +72,14 @@ namespace BSManager
             this.toolStripMenuItem4,
             this.quitToolStripMenuItem});
             this.contextMenuStrip1.Name = "contextMenuStrip1";
-            this.contextMenuStrip1.Size = new System.Drawing.Size(150, 136);
+            this.contextMenuStrip1.Size = new System.Drawing.Size(181, 158);
             // 
             // toolStripMenuItemBS
             // 
             this.toolStripMenuItemBS.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.ToolStripMenuItemDisco});
             this.toolStripMenuItemBS.Name = "toolStripMenuItemBS";
-            this.toolStripMenuItemBS.Size = new System.Drawing.Size(149, 22);
+            this.toolStripMenuItemBS.Size = new System.Drawing.Size(180, 22);
             this.toolStripMenuItemBS.Text = "Base Stations";
             // 
             // ToolStripMenuItemDisco
@@ -93,7 +93,7 @@ namespace BSManager
             this.hMDToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.ToolStripMenuItemHmd});
             this.hMDToolStripMenuItem.Name = "hMDToolStripMenuItem";
-            this.hMDToolStripMenuItem.Size = new System.Drawing.Size(149, 22);
+            this.hMDToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
             this.hMDToolStripMenuItem.Text = "HMD";
             // 
             // ToolStripMenuItemHmd
@@ -105,14 +105,14 @@ namespace BSManager
             // toolStripMenuItem2
             // 
             this.toolStripMenuItem2.Name = "toolStripMenuItem2";
-            this.toolStripMenuItem2.Size = new System.Drawing.Size(149, 22);
+            this.toolStripMenuItem2.Size = new System.Drawing.Size(180, 22);
             this.toolStripMenuItem2.Text = "Force Sleep";
             this.toolStripMenuItem2.Click += new System.EventHandler(this.toolStripMenuItem2_Click);
             // 
             // toolStripRunAtStartup
             // 
             this.toolStripRunAtStartup.Name = "toolStripRunAtStartup";
-            this.toolStripRunAtStartup.Size = new System.Drawing.Size(149, 22);
+            this.toolStripRunAtStartup.Size = new System.Drawing.Size(180, 22);
             this.toolStripRunAtStartup.Text = "Run at Startup";
             this.toolStripRunAtStartup.Click += new System.EventHandler(this.toolStripRunAtStartup_Click);
             // 
@@ -125,7 +125,7 @@ namespace BSManager
             this.licenseToolStripMenuItem,
             this.createDesktopShortcutToolStripMenuItem});
             this.toolStripMenuItem4.Name = "toolStripMenuItem4";
-            this.toolStripMenuItem4.Size = new System.Drawing.Size(149, 22);
+            this.toolStripMenuItem4.Size = new System.Drawing.Size(180, 22);
             this.toolStripMenuItem4.Text = "Help and Info";
             // 
             // bSManagerVersionToolStripMenuItem
@@ -145,7 +145,7 @@ namespace BSManager
             // SteamDBToolStripMenuItem
             // 
             this.SteamDBToolStripMenuItem.Name = "SteamDBToolStripMenuItem";
-            this.SteamDBToolStripMenuItem.Size = new System.Drawing.Size(96, 22);
+            this.SteamDBToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
             this.SteamDBToolStripMenuItem.Text = "N/D";
             // 
             // documentationToolStripMenuItem
@@ -172,7 +172,7 @@ namespace BSManager
             // quitToolStripMenuItem
             // 
             this.quitToolStripMenuItem.Name = "quitToolStripMenuItem";
-            this.quitToolStripMenuItem.Size = new System.Drawing.Size(149, 22);
+            this.quitToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
             this.quitToolStripMenuItem.Text = "Quit";
             this.quitToolStripMenuItem.Click += new System.EventHandler(this.quitToolStripMenuItem_Click);
             // 

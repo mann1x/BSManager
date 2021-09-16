@@ -38,7 +38,9 @@ namespace BSManager
         static int bsCount = 0;
 
         static List<string> bslist = new List<string>();
-        static IEnumerable<JToken> bsSerials;
+        static List<string> bsSerials = new List<string>();
+
+        static IEnumerable<JToken> bsTokens;
 
         // "Magic" string for all BLE devices
         static string _aqsAllBLEDevices = "(System.Devices.Aep.ProtocolId:=\"{bb7bb05e-5972-42b5-94fc-76eaa7084d49}\")";
@@ -242,6 +244,7 @@ namespace BSManager
                 var name = Assembly.GetExecutingAssembly().GetName();
                 _versionInfo = string.Format($"{name.Version.Major:0}.{name.Version.Minor:0}.{name.Version.Build:0}");
 
+                AutoUpdater.ReportErrors = false;
                 AutoUpdater.InstalledVersion = new Version(_versionInfo);
                 AutoUpdater.DownloadPath = Application.StartupPath;
                 AutoUpdater.RunUpdateAsAdmin = false;
@@ -314,6 +317,8 @@ namespace BSManager
                     }                
                 }
 
+                
+
                 BS_discover();
 
                 USBDiscovery();
@@ -359,11 +364,23 @@ namespace BSManager
             }
         }
 
-        private void ChangeDiscoStrip()
+        private void ChangeDiscoMsg(string msg)
         {
             try
             {
-                ToolStripMenuItemDisco.Text = "Discovered: " + bslist.Count.ToString();
+                ToolStripMenuItemDisco.Text = "Discovered: " + msg;
+            }
+            catch (Exception ex)
+            {
+                HandleEx(ex);
+            }
+        }
+
+        private void ChangeDiscoStrip(string count)
+        {
+            try
+            {
+                ToolStripMenuItemDisco.Text = "Discovered: " + count;
                 if (bslist.Count > 0)
                 {
                     foreach (string bs in bslist)
@@ -416,7 +433,18 @@ namespace BSManager
                     JObject o = JObject.Parse(json);
                     Trace.WriteLine("JSON PARSED");
 
-                    bsSerials = o.SelectTokens("$..base_serial_number");
+                    bsTokens = o.SelectTokens("$..base_serial_number");
+
+                    int _maxbs = 6;
+                    int _curbs = 1;
+                    
+                    foreach (JToken bsitem in bsTokens)
+                    {
+                        if (!bsSerials.Contains(bsitem.ToString())) bsSerials.Add(bsitem.ToString());
+                        Trace.WriteLine("BSITEM=" + bsitem.ToString());
+                        _curbs++;
+                        if (_curbs > _maxbs) break;
+                    }
 
                     Trace.WriteLine("BSSERIALS=" + string.Join(", ", bsSerials));
 
@@ -435,27 +463,28 @@ namespace BSManager
 
         private async void BS_discover()
         {
-            try { 
+            try {
+                bslist.Clear();
                 bool _doDisco = true;
                 int idx = 0;
                 while (_doDisco && idx < 21) { 
-                    bslist.Clear();
                     await Process_cmd("list");
                     Trace.WriteLine("BSCOUNT=" + bsCount.ToString());
                     Trace.WriteLine("BSLIST=" + bslist.Count.ToString());
-                    if (bsCount > 0)
+                    if (bsCount != bslist.Count || bslist.Count < 1)
                     {
-                        if (bsCount == bslist.Count) _doDisco = false;
-                    } else
-                    {
-                        if (bslist.Count > 0) _doDisco = false;
+                        await Task.Delay(2500);
+                    } else {
+                        if (bslist.Count >= bsCount) _doDisco = false;
                     }
+                    ChangeDiscoMsg(bslist.Count.ToString() + " (searching...)");
                     idx++;
-                    await Task.Delay(2500);
                 }
-                ChangeDiscoStrip();
+                ChangeDiscoStrip(bslist.Count.ToString());
                 if (bsCount == 0)
-                    notifyIcon1.ShowBalloonTip(1000, null, "Found " + bsCount.ToString() + " base stations", ToolTipIcon.Error);
+                    notifyIcon1.ShowBalloonTip(1000, null, "No Base Stations found", ToolTipIcon.Warning);
+                if (bslist.Count != bsCount)
+                    notifyIcon1.ShowBalloonTip(1000, null, "Found " + bslist.Count.ToString() + " Base Stations instead of " + bsCount.ToString() + "configured in Steam", ToolTipIcon.Warning);
             }
             catch (Exception ex)
             {
@@ -500,7 +529,7 @@ namespace BSManager
                                     Match sm2 = Regex.Match(bs, patternv2);
                                     if (sm2.Success)
                                     {
-                                        cmdStr = "set 00001523-1212-efde-1523-785feabcd124";
+                                        cmdStr = "set 00001525-1212-efde-1523-785feabcd124";
                                     }
                                     break;
                                 case "WRITE":
@@ -521,11 +550,11 @@ namespace BSManager
                                     {
                                         if (action == "wakeup")
                                         {
-                                            cmdStr = "write 00001523-1212-efde-1523-785feabcd124 01";
+                                            cmdStr = "write 00001525-1212-efde-1523-785feabcd124 01";
                                         }
                                         else
                                         {
-                                            cmdStr = "write 00001523-1212-efde-1523-785feabcd124 00";
+                                            cmdStr = "write 00001525-1212-efde-1523-785feabcd124 00";
                                         }
                                     }
 
@@ -579,6 +608,8 @@ namespace BSManager
                         {
                             loopRetries = _loopRetries + 1;
                         }
+
+                        await Process_cmd("close");
                     }
 
                     if (sbError.Length > 0)
@@ -972,18 +1003,15 @@ namespace BSManager
                 Match m = Regex.Match(names[i].ToString(), pattern);
                 if (m.Success) {
                     Trace.WriteLine($"FOUND BASESTATION={names[i]}");
-                    bslist.Add(names[i].ToString());
-
+                    if (!bslist.Contains(names[i].ToString())) bslist.Add(names[i].ToString());
                 }
 
                 Match mv2 = Regex.Match(names[i].ToString(), patternv2);
                 if (mv2.Success)
                 {
                     Trace.WriteLine($"FOUND BASESTATION={names[i]}");
-                    bslist.Add(names[i].ToString());
-
+                    if (!bslist.Contains(names[i].ToString())) bslist.Add(names[i].ToString());
                 }
-
 
                 Trace.WriteLine($"#{i:00}: {names[i]}");
             }
