@@ -1,6 +1,6 @@
 {
   "version": "1.2.3",
-  "url": "http://https://github.com/mann1x/BSManager/tree/master/BSManager/BSManager.zip",
+  "url": "https://github.com/mann1x/BSManager/releases/download/1.2.3/BSManager.zip",
   "changelog": "http://https://github.com/mann1x/BSManager/releases",
   "mandatory": {
     "value": false,
@@ -8,7 +8,7 @@
     "mode": 1
   },
   "checksum": {
-    "value": "B5B06D67ECCE1521F958F647ED46E10A5C1871E40E00EA85FFDD7DDD06203A6D",
+    "value": "3C51C98A35ACD62963D5D22DEC72C59D2FD5CCA5BEA33BB0BC40F709987E04A6",
     "hashingAlgorithm": "SHA256"
   }
 }
