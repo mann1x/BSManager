@@ -87,7 +87,7 @@
 
   <PropertyGroup>
     <PublishReadyToRun>true</PublishReadyToRun>
-    <Version>1.2.3</Version>
+    <Version>1.2.2</Version>
     <Copyright>ManniX</Copyright>
     <Description>VR Base Stations Manager for Pimax and Vive Pro HeadSets</Description>
     <PackageProjectUrl>https://github.com/mann1x/BSManager</PackageProjectUrl>
