@@ -47,6 +47,8 @@ You can compile with Visual Studio 2019 and .NET 5.
 
 ## Changelog:
 
+- v1.2.3
+    - New: Implemented AutoUpdater
 - v1.2.1
     - New: Added blind experimental Base Stations v2 support
 - v1.2.0
