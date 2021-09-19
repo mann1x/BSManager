@@ -51,6 +51,7 @@ Only for the BS v2 if the last issued command is Sleep and the Base Stations are
 
 ## Credits
 
+- Thanks to:
     - The excellent BLEConsole from SeNSSoFT [https://github.com/sensboston/BLEConsole]
     - LightHouseController from Alex Flynn [https://bitbucket.org/Flynny75/lighthousecontroller/src/master/]
     - SparkerInVR's great support in testing [https://www.twitch.tv/sparkerinvr]
