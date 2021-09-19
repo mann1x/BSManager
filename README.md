@@ -67,7 +67,7 @@ You can compile with Visual Studio 2019 and .NET 5.
 - v2.0.0
     - New: Support for Base Stations v2
     - New: Removed discovery to use BLE Advertisement messages instead
-    - New: Icon to display BD status, action pending
+    - New: Icon to display BS status, action pending
     - New: Switch to enable/disable Debug Log
     - Fix: Many fixes and code improvements
 - v1.2.5
