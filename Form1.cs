@@ -15,6 +15,8 @@ using System.Runtime.InteropServices;
 using Windows.Devices.Enumeration;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
+using Windows.Devices.Bluetooth.Advertisement;
+using Windows.Storage.Streams;
 using System.Reflection;
 using System.Threading;
 using System.Text.RegularExpressions;
@@ -24,64 +26,32 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using IWshRuntimeLibrary;
 using AutoUpdaterDotNET;
+using System.Runtime.Serialization;
 
 namespace BSManager
 {
-
     public partial class Form1 : Form
 
     {
-        System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
+        readonly ComponentResourceManager resources = new(typeof(Form1));
 
-
-        static StringBuilder sbError = new StringBuilder();
         static int bsCount = 0;
 
-        static List<string> bslist = new List<string>();
         static List<string> bsSerials = new List<string>();
 
         static IEnumerable<JToken> bsTokens;
 
-        // "Magic" string for all BLE devices
-        static string _aqsAllBLEDevices = "(System.Devices.Aep.ProtocolId:=\"{bb7bb05e-5972-42b5-94fc-76eaa7084d49}\")";
-        static string[] _requestedBLEProperties = { "System.Devices.Aep.DeviceAddress", "System.Devices.Aep.Bluetooth.Le.IsConnectable", };
-
-        static List<DeviceInformation> _deviceList = new List<DeviceInformation>();
         static BluetoothLEDevice _selectedDevice = null;
 
         static List<BluetoothLEAttributeDisplay> _services = new List<BluetoothLEAttributeDisplay>();
         static BluetoothLEAttributeDisplay _selectedService = null;
 
         static List<BluetoothLEAttributeDisplay> _characteristics = new List<BluetoothLEAttributeDisplay>();
-        static BluetoothLEAttributeDisplay _selectedCharacteristic = null;
-
-        // Only one registered characteristic at a time.
-        static List<GattCharacteristic> _subscribers = new List<GattCharacteristic>();
 
         // Current data format
         static DataFormat _dataFormat = DataFormat.UTF8;
 
         static string _versionInfo;
-
-        // Variables for "foreach" loop implementation
-        static List<string> _forEachCommands = new List<string>();
-        static List<string> _forEachDeviceNames = new List<string>();
-        static int _forEachCmdCounter = 0;
-        static int _forEachDeviceCounter = 0;
-        static bool _forEachCollection = false;
-        static bool _forEachExecution = false;
-        static string _forEachDeviceMask = "";
-        static int _inIfBlock = 0;
-        static bool _failedConditional = false;
-        static bool _closingIfBlock = false;
-        static int _exitCode = 0;
-        static ManualResetEvent _notifyCompleteEvent = null;
-        static ManualResetEvent _delayEvent = null;
-        static bool _primed = false;
-        static bool _doWork = true;
-
-        static int _loopRetries = 20;
-        static int _cmdRetries = 10;
 
         static TimeSpan _timeout = TimeSpan.FromSeconds(5);
 
@@ -89,12 +59,37 @@ namespace BSManager
 
         static bool lhfound = false;
 
-        private TextWriterTraceListener traceEx = new TextWriterTraceListener("BSManager_exceptions.log", "BSManager");
+        private HashSet<Lighthouse> _lighthouses = new HashSet<Lighthouse>();
+        private BluetoothLEAdvertisementWatcher watcher;
+
+        private int _delayCmd = 500;
+
+        private const byte v2_ON = 0x01;
+        private const byte v2_OFF = 0x00;
+        private readonly Guid v2_powerGuid = Guid.Parse("00001523-1212-efde-1523-785feabcd124");
+        private readonly Guid v2_powerCharacteristic = Guid.Parse("00001525-1212-efde-1523-785feabcd124");
+
+        private const string v1_ON = "12 00 00 28 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00";
+        private const string v1_OFF = "12 01 00 28 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00";
+        private readonly string v1_powerService = "51968";
+        private readonly string v1_powerCharacteristic = "51969";
+
+        private static int processingCmd = 0;
+
+        public bool HeadSetState = false;
+
+        public Thread thrUSBDiscovery;
+
+        private TextWriterTraceListener traceEx = new TextWriterTraceListener("BSManager_exceptions.log", "BSManagerEx");
+        private TextWriterTraceListener traceDbg = new TextWriterTraceListener("BSManager.log", "BSManagerDbg");
+
+        // ENABLE DEBUG LOD
+
+        private bool debugLog = false;
 
         public Form1()
         {
-
-            Trace.WriteLine(" STARTED ");
+            LogLine($"FORM INIT ");
 
             InitializeComponent();
 
@@ -103,16 +98,25 @@ namespace BSManager
 
         private void HandleEx(Exception ex)
         {
-            notifyIcon1.ShowBalloonTip(1000, null, ex.ToString(), ToolTipIcon.Error);
-            string errStamp = DateTime.Now.ToString();
-            string errMsg = ex.ToString();
-            traceEx.WriteLine($"[{errStamp}] {errMsg}");
-            traceEx.Flush();
+            try { 
+                notifyIcon1.ShowBalloonTip(1000, null, ex.ToString(), ToolTipIcon.Error);
+                LogLine($"{ex}");
+                traceEx.WriteLine($"[{DateTime.Now}] {ex}");
+                traceEx.Flush();
+            }
+            catch (Exception e)
+            {
+                LogLine($"{e}");
+            }
+
         }
-        static private void sHandleEx(Exception ex)
+        private void LogLine(string msg)
         {
-            var form1 = new Form1();
-            form1.HandleEx(ex);
+            Trace.WriteLine($"{msg}");
+            if (debugLog) { 
+                traceDbg.WriteLine($"[{DateTime.Now}] {msg}");
+                traceDbg.Flush();
+            }
         }
         private void USBDiscovery()
         {
@@ -126,7 +130,7 @@ namespace BSManager
                 {
                     string did = (string)device.GetPropertyValue("DeviceID");
 
-                    Trace.WriteLine("DID=" + did);
+                    LogLine($"DID={did}");
 
                     CheckHMDOn(did);
 
@@ -146,19 +150,17 @@ namespace BSManager
         {
             try
             {
-                if (did.Contains("VID_0483&PID_0101"))
+                string _hmd = "";
+
+                if (did.Contains("VID_0483&PID_0101")) _hmd = "PIMAX HMD";
+                if (did.Contains("VID_2996&PID_0309")) _hmd = "VIVE PRO HMD";
+
+                if (_hmd.Length > 0)
                 {
-                    Trace.WriteLine(" PIMAX HMD ON ");
-                    ChangeHMDStrip("PIMAX ON ");
+                    LogLine($"## {_hmd} ON ");
+                    ChangeHMDStrip($" {_hmd} ON ", true);
                     this.notifyIcon1.Icon = Resource1.bsmanager_on;
-                    BS_cmd("wakeup");
-                }
-                if (did.Contains("VID_2996&PID_0309"))
-                {
-                    Trace.WriteLine(" VIVE PRO HMD ON ");
-                    ChangeHMDStrip("VIVE PRO ON ");
-                    this.notifyIcon1.Icon = Resource1.bsmanager_on;
-                    BS_cmd("wakeup");
+                    HeadSetState = true;
                 }
             }
             catch (Exception ex)
@@ -171,19 +173,17 @@ namespace BSManager
         {
             try
             {
-                if (did.Contains("VID_0483&PID_0101"))
+                string _hmd = "";
+
+                if (did.Contains("VID_0483&PID_0101")) _hmd = "PIMAX HMD";
+                if (did.Contains("VID_2996&PID_0309")) _hmd = "VIVE PRO HMD";
+
+                if (_hmd.Length > 0)
                 {
-                    Trace.WriteLine(" PIMAX HMD OFF ");
-                    ChangeHMDStrip("PIMAX OFF ");
-                    this.notifyIcon1.Icon = ((System.Drawing.Icon)(resources.GetObject("notifyIcon1.Icon")));
-                    BS_cmd("sleep");
-                }
-                if (did.Contains("VID_2996&PID_0309"))
-                {
-                    Trace.WriteLine(" VIVE PRO HMD OFF ");
-                    ChangeHMDStrip("VIVE PRO OFF ");
-                    this.notifyIcon1.Icon = ((System.Drawing.Icon)(resources.GetObject("notifyIcon1.Icon")));
-                    BS_cmd("sleep");
+                    LogLine($"## {_hmd} OFF ");
+                    ChangeHMDStrip($" {_hmd} OFF ", false);
+                    this.notifyIcon1.Icon = (Icon)(resources.GetObject("notifyIcon1.Icon"));
+                    HeadSetState = false;
                 }
             }
             catch (Exception ex)
@@ -206,7 +206,7 @@ namespace BSManager
                     {
                         CheckHMDOn(property.Value.ToString());
                     }
-                    //Trace.WriteLine(" INSERTED " + property.Name + " = " + property.Value);
+                    //LogLine($" INSERTED " + property.Name + " = " + property.Value);
                 }
                     e.NewEvent.Dispose();
             }
@@ -226,7 +226,7 @@ namespace BSManager
                     {
                         CheckHMDOff(property.Value.ToString());
                     }
-                    //Trace.WriteLine(" REMOVED " + property.Name + " = " + property.Value);
+                    //LogLine($" REMOVED " + property.Name + " = " + property.Value);
                 }
                 e.NewEvent.Dispose();
             }
@@ -241,8 +241,40 @@ namespace BSManager
 
             try
             {
+                Trace.AutoFlush = true;
+
+                this.Hide();
+
                 var name = Assembly.GetExecutingAssembly().GetName();
                 _versionInfo = string.Format($"{name.Version.Major:0}.{name.Version.Minor:0}.{name.Version.Build:0}");
+
+                using (RegistryKey registrySettingsCheck = Registry.CurrentUser.OpenSubKey("SOFTWARE\\ManniX\\BSManager", true))
+                {
+
+                    RegistryKey registrySettings;
+
+                    if (registrySettingsCheck == null)
+                    {
+                        registrySettings = Registry.CurrentUser.CreateSubKey
+                            ("SOFTWARE\\ManniX\\BSManager");
+                    }
+
+                    registrySettings = Registry.CurrentUser.OpenSubKey("SOFTWARE\\ManniX\\BSManager", true);
+
+                    if (registrySettings.GetValue("DebugLog") == null)
+                    {
+                        toolStripDebugLog.Checked = false;
+                        debugLog = false;
+                    }
+                    else
+                    {
+                        toolStripDebugLog.Checked = true;
+                        debugLog = true;
+                    }
+                }
+
+                LogLine($"STARTED ");
+                LogLine($"Version: {_versionInfo}");
 
                 AutoUpdater.ReportErrors = false;
                 AutoUpdater.InstalledVersion = new Version(_versionInfo);
@@ -254,22 +286,18 @@ namespace BSManager
 
                 bSManagerVersionToolStripMenuItem.Text = "BSManager Version " + _versionInfo;
 
-                RegistryKey registryStart = Registry.CurrentUser.OpenSubKey
-                ("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
-
-                if (registryStart.GetValue("BSManager") == null)
+                using (RegistryKey registryStart = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
                 {
-                    toolStripRunAtStartup.Checked = false;
-                }
-                else
-                {
-                    toolStripRunAtStartup.Checked = true;
+                    if (registryStart.GetValue("BSManager") == null)
+                    {
+                        toolStripRunAtStartup.Checked = false;
+                    }
+                    else
+                    {
+                        toolStripRunAtStartup.Checked = true;
+                    }
                 }
 
-                this.Hide();
-
-                registryStart.Dispose();
-            
                 WqlEventQuery insertQuery = new WqlEventQuery("SELECT * FROM __InstanceCreationEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_USBHub'");
 
                 ManagementEventWatcher insertWatcher = new ManagementEventWatcher(insertQuery);
@@ -281,22 +309,16 @@ namespace BSManager
                 removeWatcher.EventArrived += new EventArrivedEventHandler(DeviceRemovedEvent);
                 removeWatcher.Start();
 
-                var watcher = DeviceInformation.CreateWatcher(_aqsAllBLEDevices, _requestedBLEProperties, DeviceInformationKind.AssociationEndpoint);
-                watcher.Added += (DeviceWatcher sender, DeviceInformation devInfo) =>
-                {
-                    if (_deviceList.FirstOrDefault(d => d.Id.Equals(devInfo.Id) || d.Name.Equals(devInfo.Name)) == null) _deviceList.Add(devInfo);
-                };
-                watcher.Updated += (_, __) => { }; // We need handler for this event, even an empty!
+                watcher = new BluetoothLEAdvertisementWatcher();
+                watcher.Received += AdvertisementWatcher_Received;
 
-                //Watch for a device being removed by the watcher
-                //watcher.Removed += (DeviceWatcher sender, DeviceInformationUpdate devInfo) =>
-                //{
-                //    _deviceList.Remove(FindKnownDevice(devInfo.Id));
-                //};
+                thrUSBDiscovery = new Thread(RunUSBDiscovery);
+                thrUSBDiscovery.Start();
 
-                watcher.EnumerationCompleted += (DeviceWatcher sender, object arg) => { sender.Stop(); };
-                watcher.Stopped += (DeviceWatcher sender, object arg) => { _deviceList.Clear(); sender.Start(); };
+                Thread.Sleep(500);
+
                 watcher.Start();
+
 
                 lhfound = Read_SteamVR_config();
                 if (!lhfound)
@@ -317,11 +339,8 @@ namespace BSManager
                     }                
                 }
 
-                
+                //BS_discover();
 
-                BS_discover();
-
-                USBDiscovery();
             }
             catch (Exception ex)
             {
@@ -329,6 +348,11 @@ namespace BSManager
             }
 
         }
+        void RunUSBDiscovery()
+        {
+            USBDiscovery();
+        }
+
         private void AutoUpdaterOnParseUpdateInfoEvent(ParseUpdateInfoEventArgs args)
         {
             dynamic json = JsonConvert.DeserializeObject(args.RemoteData);
@@ -350,13 +374,14 @@ namespace BSManager
                 }
             };
         }
-        private void ChangeHMDStrip(string label)
+        private void ChangeHMDStrip(string label, bool _checked)
         {
             try
             {
-
-                this.BeginInvoke((MethodInvoker)delegate { this.ToolStripMenuItemHmd.Text = label; });
-
+                BeginInvoke((MethodInvoker)delegate { 
+                    ToolStripMenuItemHmd.Text = label;
+                    ToolStripMenuItemHmd.Checked = _checked;
+                });
             }
             catch (Exception ex)
             {
@@ -364,36 +389,73 @@ namespace BSManager
             }
         }
 
-        private void ChangeDiscoMsg(string msg)
+        private void ChangeDiscoMsg(string count, string nameBS)
         {
             try
             {
-                ToolStripMenuItemDisco.Text = "Discovered: " + msg;
+                BeginInvoke((MethodInvoker)delegate { 
+                    ToolStripMenuItemDisco.Text = $"Discovered: {count}/{bsCount}";
+                    toolStripMenuItemBS.DropDownItems.Add(nameBS);
+                });                
+                
+
+
             }
             catch (Exception ex)
             {
                 HandleEx(ex);
             }
         }
-
-        private void ChangeDiscoStrip(string count)
+        private void ChangeBSMsg(string _name, bool _poweredOn, LastCmd _lastCmd, Action _action)
         {
             try
             {
-                ToolStripMenuItemDisco.Text = "Discovered: " + count;
-                if (bslist.Count > 0)
+                string _cmdStatus = "";
+                string _actionStatus = "";
+                switch (_lastCmd)
                 {
-                    foreach (string bs in bslist)
-                    {
-                        toolStripMenuItemBS.DropDownItems.Add(bs);
-                    }
+                    case LastCmd.ERROR:
+                        _cmdStatus = "[ERROR] ";
+                        break;
+                    default:
+                        _cmdStatus = "";
+                        break;
                 }
+                switch (_action)
+                {
+                    case Action.WAKEUP:
+                        _actionStatus = " - Going to Wakeup";
+                        break;
+                    case Action.SLEEP:
+                        _actionStatus = " - Going to Standby";
+                        break;
+                    default:
+                        _actionStatus = "";
+                        break;
+                }
+
+                BeginInvoke((MethodInvoker)delegate {
+                    foreach (ToolStripMenuItem item in toolStripMenuItemBS.DropDownItems)
+                    {
+                        if (item.Text.StartsWith(_name))
+                        {
+                            if (_poweredOn) item.Image = Resource1.bsmanager_on.ToBitmap();
+                            if (!_poweredOn) item.Image = null;
+                            item.Text = $"{_name} {_cmdStatus}{_actionStatus}";
+                        }
+                    }
+
+                });
+
+
+
             }
             catch (Exception ex)
             {
                 HandleEx(ex);
             }
         }
+
         private bool Read_SteamVR_config()
         {
             try
@@ -408,7 +470,7 @@ namespace BSManager
                         {
 
                             steamvr_lhjson = o.ToString() + "\\config\\lighthouse\\lighthousedb.json";
-                            Trace.WriteLine("STEAMVRPATH=" + steamvr_lhjson);
+                            LogLine($"STEAMVRPATH={steamvr_lhjson}");
                             return true;
                         }
                     }
@@ -429,9 +491,9 @@ namespace BSManager
                 using (StreamReader r = new StreamReader(steamvr_lhjson))
                 {
                     string json = r.ReadToEnd();
-                    Trace.WriteLine("JSON LEN=" + json.Length.ToString());
+                    LogLine($"JSON LEN={json.Length}");
                     JObject o = JObject.Parse(json);
-                    Trace.WriteLine("JSON PARSED");
+                    LogLine($"JSON PARSED");
 
                     bsTokens = o.SelectTokens("$..base_serial_number");
 
@@ -441,12 +503,12 @@ namespace BSManager
                     foreach (JToken bsitem in bsTokens)
                     {
                         if (!bsSerials.Contains(bsitem.ToString())) bsSerials.Add(bsitem.ToString());
-                        Trace.WriteLine("BSITEM=" + bsitem.ToString());
+                        LogLine($"BSITEM={bsitem}");
                         _curbs++;
                         if (_curbs > _maxbs) break;
                     }
 
-                    Trace.WriteLine("BSSERIALS=" + string.Join(", ", bsSerials));
+                    LogLine($"BSSERIALS=" + string.Join(", ", bsSerials));
 
                     bsCount = bsSerials.Count();
                     return true;
@@ -461,1211 +523,363 @@ namespace BSManager
             }
         }
 
-        private async void BS_discover()
+        private void AdvertisementWatcher_Received(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
         {
-            try {
-                bslist.Clear();
-                bool _doDisco = true;
-                int idx = 0;
-                while (_doDisco && idx < 21) { 
-                    await Process_cmd("list");
-                    Trace.WriteLine("BSCOUNT=" + bsCount.ToString());
-                    Trace.WriteLine("BSLIST=" + bslist.Count.ToString());
-                    if (bsCount != bslist.Count || bslist.Count < 1)
-                    {
-                        await Task.Delay(2500);
-                    } else {
-                        if (bslist.Count >= bsCount) _doDisco = false;
-                    }
-                    ChangeDiscoMsg(bslist.Count.ToString() + " (searching...)");
-                    idx++;
-                }
-                ChangeDiscoStrip(bslist.Count.ToString());
-                if (bsCount == 0)
-                    notifyIcon1.ShowBalloonTip(1000, null, "No Base Stations found", ToolTipIcon.Warning);
-                if (bslist.Count != bsCount)
-                    notifyIcon1.ShowBalloonTip(1000, null, "Found " + bslist.Count.ToString() + " Base Stations instead of " + bsCount.ToString() + "configured in Steam", ToolTipIcon.Warning);
-            }
-            catch (Exception ex)
-            {
-                HandleEx(ex);
-            }    
-        }
+            try { 
 
-        private async void BS_cmd(string action)
-        {
-            try {
-                foreach (string bs in bslist) {
+                //Trace.WriteLine($"Advertisment: {args.Advertisement.LocalName}");
 
-                    string pattern = @"HTC BS(\s.*)";
-                    string patternv2 = @"LHB-(.*)";
-
-
-                    await Process_cmd("format hex");
-
-                    int cmdRetries = 0;
-                    int loopRetries = 0;
-
-                    async Task cmdPump(string cmdType, string action)
-                    {
-                        cmdRetries = 0;
-                        while (cmdRetries <= _cmdRetries)
-                        {
-                            sbError.Clear();
-                            string cmdStr = "";
-
-                            switch (cmdType) { 
-                                case "OPEN":
-                                    await Process_cmd("close");
-                                    await Task.Delay(200);
-                                    cmdStr = "open " + bs;
-                                    break;
-                                case "SET":
-                                    Match sm = Regex.Match(bs, pattern);
-                                    if (sm.Success)
-                                    {
-                                        cmdStr = "set 51968";
-                                    }
-                                    Match sm2 = Regex.Match(bs, patternv2);
-                                    if (sm2.Success)
-                                    {
-                                        cmdStr = "set 00001525-1212-efde-1523-785feabcd124";
-                                    }
-                                    break;
-                                case "WRITE":
-                                    Match wm = Regex.Match(bs, pattern);
-                                    if (wm.Success)
-                                    {
-                                        if (action == "wakeup")
-                                        {
-                                            cmdStr = "write 51969 12 00 00 28 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00";
-                                        }
-                                        else
-                                        {
-                                            cmdStr = "write 51969 12 01 00 28 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00";
-                                        }
-                                    }
-                                    Match wm2 = Regex.Match(bs, patternv2);
-                                    if (wm2.Success)
-                                    {
-                                        if (action == "wakeup")
-                                        {
-                                            cmdStr = "write 00001525-1212-efde-1523-785feabcd124 01";
-                                        }
-                                        else
-                                        {
-                                            cmdStr = "write 00001525-1212-efde-1523-785feabcd124 00";
-                                        }
-                                    }
-
-                                    break;
-                            }
-                            await Process_cmd(cmdStr);
-                            await Task.Delay(200);
-
-                            if (sbError.Length > 0)
-                            {
-                                sbError.Insert(0, cmdType + ": ");
-                                cmdRetries++;
-                                await Task.Delay(1000);
-                            }
-                            else
-                            {
-                                cmdRetries = _cmdRetries + 1;
-                            }
-                        }
-
-                    }
-
-
-                    loopRetries = 0;
-                    while (loopRetries <= _loopRetries)
-                    {
-
-                        Trace.WriteLine("## " + bs + " loop " + loopRetries.ToString() + "/" + _loopRetries.ToString());
-                        
-                        sbError.Clear();
-
-                        await cmdPump("OPEN", "");
-
-                        if (sbError.Length < 1)
-                        {
-
-                            await cmdPump("SET", "");
-
-                            if (sbError.Length < 1)
-                            {
-                                await cmdPump("WRITE", action);
-                            }
-                        }
-
-                        if (sbError.Length > 0)
-                        {
-                            loopRetries++;
-                            await Task.Delay(1000);
-                        }
-                        else
-                        {
-                            loopRetries = _loopRetries + 1;
-                        }
-
-                        await Process_cmd("close");
-                    }
-
-                    if (sbError.Length > 0)
-                    {
-                        sbError.Insert(0, bs + ":\n");
-                        notifyIcon1.ShowBalloonTip(5000, null, sbError.ToString(), ToolTipIcon.Error);
-                        Trace.WriteLine("## " + bs + " ERROR");
-                    }
-
-                    Trace.WriteLine("## " + bs + " DONE");
-
-                    _deviceList.TrimExcess();
-                }
-            }
-
-            catch (Exception ex)
-            {
-                HandleEx(ex);
-            }
-
-        }
-
-        static async Task Process_cmd(string cmdStr)
-        {
-            string cmd = string.Empty;
-            var userInput = string.Empty;
-            _doWork = true;
-
-            while (_doWork)
-            {
-
-                try
+                if (!args.Advertisement.LocalName.StartsWith("LHB-") && !args.Advertisement.LocalName.StartsWith("HTC BS "))
                 {
+                    return;
+                }
 
-                    // If we're inside "foreach" loop, process saved commands
-                    if (_forEachExecution)
+                //Trace.WriteLine($"Advertisment: {args.Advertisement.LocalName}");
+
+                var existing = _lighthouses.SingleOrDefault(lh => lh.Address == args.BluetoothAddress);
+
+                if (existing == null)
+                {
+                    LogLine($"Found lighthouse {args.Advertisement.LocalName}");
+
+                    existing = new Lighthouse(args.Advertisement.LocalName, args.BluetoothAddress);
+                    _lighthouses.Add(existing);
+                    ChangeDiscoMsg(_lighthouses.Count.ToString(), existing.Name);
+                }
+                
+                int intpstate = 0;
+
+                if (args.Advertisement.LocalName.StartsWith("LHB-"))
+                {
+                    var valveData = args.Advertisement.GetManufacturerDataByCompanyId(0x055D).Single();
+                    var data = new byte[valveData.Data.Length];
+
+                    using (var reader = DataReader.FromBuffer(valveData.Data))
                     {
-                        userInput = _forEachCommands[_forEachCmdCounter];
-                        if (_forEachCmdCounter++ >= _forEachCommands.Count - 1)
-                        {
-                            _forEachCmdCounter = 0;
-                            if (_forEachDeviceCounter++ > _forEachDeviceNames.Count - 1)
-                            {
-                                _forEachExecution = false;
-                                _forEachCommands.Clear();
-                                userInput = string.Empty;
-                            }
-                        }
-                    }
-                    // Otherwise read the stdin
-                    else {
-                        userInput = cmdStr;
-                        cmdStr = string.Empty;
+                        reader.ReadBytes(data);
                     }
                     
-
-                    // Check for the end of input
-                    if (string.IsNullOrEmpty(userInput))
+                    if (!string.IsNullOrEmpty(data[4].ToString()))
                     {
-                        _doWork = false;
+                        intpstate = Int32.Parse(data[4].ToString());
+                        existing.V2PoweredOn = intpstate > 0;
+
+                        //existing.PoweredOn = data[4] == 0x03;
+                        //LogLine($"{existing.Name} power status {intpstate} last {existing.lastPowerState} PoweredOn={existing.PoweredOn}");
                     }
-                    else userInput = userInput?.TrimStart(new char[] { ' ', '\t' });
 
-                    string[] strs = userInput.Split(' ');
-                    cmd = strs.First().ToLower();
-                    string parameters = string.Join(" ", strs.Skip(1));
+                    existing.V2 = true;
+                }
+                else 
+                {                    
+                    existing.V2 = false;
+                }
 
-                    if (_forEachCollection && !cmd.Equals("endfor"))
+                if (existing.V2 && existing.V2PoweredOn && existing.LastCmd == LastCmd.SLEEP && !HeadSetState)
+                {
+                    TimeSpan _delta = DateTime.Now - existing.LastCmdStamp;
+                    if (_delta.Minutes > 5)
                     {
-                        _forEachCommands.Add(userInput);
-                    }
-                    if (cmd == "endif" || cmd == "elif" || cmd == "else")
-                        _closingIfBlock = false;
-                    else
-                    {
-                        if ((_inIfBlock > 0 && !_closingIfBlock) || _inIfBlock == 0 )
+                        if (0 == Interlocked.Exchange(ref processingCmd, 1))
                         {
-                            await HandleSwitch(cmd, parameters);
-                        }
-                        else
-                        {
-                            continue;
+                            LogLine($"Processing SLEEP check 5 minutes still ON for: {existing.Name}");
+                            ProcessLighthouseAsync(existing, "SLEEP").ConfigureAwait(true);
                         }
                     }
                 }
-                catch (Exception ex)
+
+                if (HeadSetState)
                 {
-                    sHandleEx(ex);
-                }
-
-                if (cmd.Equals("write") || cmd.Equals("w"))
-                    await Task.Delay(200);
-
-                if (!_forEachExecution && cmdStr == string.Empty)
-                    _doWork = false;
-
-            }
-        }
-
-        static async Task HandleSwitch(string cmd, string parameters)
-        {
-            Trace.WriteLine("CMD=" + cmd);
-            switch (cmd)
-            {
-                case "if":
-                    _inIfBlock++;
-                    _exitCode = 0;
-                    if (parameters != "")
+                    if (existing.V2 && (existing.LastCmd == LastCmd.NONE) && existing.PoweredOn)
                     {
-                        string[] str = parameters.Split(' ');
-                        await HandleSwitch(str[0], str.Skip(1).Aggregate((i, j) => i + " " + j));
-                        _closingIfBlock = (_exitCode > 0);
-                        _failedConditional = _closingIfBlock;
+                        ChangeBSMsg(existing.Name, true, LastCmd.WAKEUP, Action.NONE);
+                        return;
                     }
-                    break;
-
-                case "elif":
-                    if (_failedConditional)
+                    if (existing.LastCmd != LastCmd.WAKEUP)
                     {
-                        _exitCode = 0;
-                        if (parameters != "")
-                        {
-                            string[] str = parameters.Split(' ');
-                            await HandleSwitch(str[0], str.Skip(1).Aggregate((i, j) => i + " " + j));
-                            _closingIfBlock = (_exitCode > 0);
-                            _failedConditional = _closingIfBlock;
+                        if (0 == Interlocked.Exchange(ref processingCmd, 1)) 
+                        { 
+                            ProcessLighthouseAsync(existing, "WAKEUP").ConfigureAwait(true);
                         }
                     }
-                    else
-                        _closingIfBlock = true;
-                    break;
-
-                case "else":
-                    if (_failedConditional)
-                    {
-                        _exitCode = 0;
-                        if (parameters != "")
-                        {
-                            string[] str = parameters.Split(' ');
-                            await HandleSwitch(str[0], str.Skip(1).Aggregate((i, j) => i + " " + j));
-                        }
-                    }
-                    else
-                        _closingIfBlock = true;
-                    break;
-
-                case "endif":
-                    if (_inIfBlock > 0)
-                        _inIfBlock--;
-                    _failedConditional = false;
-                    break;
-
-                case "foreach":
-                    _forEachCollection = true;
-                    _forEachDeviceMask = parameters.ToLower();
-                    break;
-
-                case "endfor":
-                    if (string.IsNullOrEmpty(_forEachDeviceMask))
-                        _forEachDeviceNames = _deviceList.OrderBy(d => d.Name).Where(d => !string.IsNullOrEmpty(d.Name)).Select(d => d.Name).ToList();
-                    else
-                        _forEachDeviceNames = _deviceList.OrderBy(d => d.Name).Where(d => d.Name.ToLower().StartsWith(_forEachDeviceMask)).Select(d => d.Name).ToList();
-                    _forEachDeviceCounter = 0;
-                    _forEachCmdCounter = 0;
-                    _forEachCollection = false;
-                    _forEachExecution = (_forEachCommands.Count > 0);
-                    break;
-
-                case "cls":
-                case "clr":
-                case "clear":
-                    break;
-
-                case "st":
-                case "stat":
-                    ShowStatus();
-                    break;
-
-                case "p":
-                case "print":
-                    if (_forEachExecution && _forEachDeviceCounter > 0)
-                        parameters = parameters.Replace("$", _forEachDeviceNames[_forEachDeviceCounter - 1]);
-
-                    _exitCode += PrintInformation(parameters);
-                    break;
-
-                case "ls":
-                case "list":
-                    ListDevices(parameters);
-                    break;
-
-                case "open":
-                    if (_forEachExecution && _forEachDeviceCounter > 0)
-                        parameters = parameters.Replace("$", _forEachDeviceNames[_forEachDeviceCounter - 1]);
-
-                    _exitCode += await OpenDevice(parameters);
-                    break;
-
-                case "timeout":
-                    ChangeTimeout(parameters);
-                    break;
-
-                case "delay":
-                    Delay(parameters);
-                    break;
-
-                case "close":
-                    CloseDevice();
-                    break;
-
-                case "fmt":
-                case "format":
-                    ChangeDisplayFormat(parameters);
-                    break;
-
-                case "set":
-                    _exitCode += await SetService(parameters);
-                    break;
-
-                case "r":
-                case "read":
-                    _exitCode += await ReadCharacteristic(parameters);
-                    break;
-
-                case "wait":
-                    _notifyCompleteEvent = new ManualResetEvent(false);
-                    _notifyCompleteEvent.WaitOne(_timeout);
-                    _notifyCompleteEvent = null;
-                    break;
-
-                case "w":
-                case "write":
-                    _exitCode += await WriteCharacteristic(parameters);
-                    break;
-
-                case "subs":
-                case "sub":
-                    _exitCode += await SubscribeToCharacteristic(parameters);
-                    break;
-
-                case "unsub":
-                case "unsubs":
-                    Unsubscribe(parameters);
-                    break;
-
-                //experimental pairing function 
-                case "pair":
-                    PairBluetooth(parameters);
-                    break;
-
-                default:
-                    Trace.WriteLine("Unknown command. Type \"?\" for help.");
-                    break;
-            }
-        }
-
-        static int PrintInformation(string param)
-        {
-            // First, we need to check output string for variables
-            string[] btVars = { "%mac", "%addr", "%name", "%stat", "%id" };
-            bool hasBTVars = btVars.Any(param.Contains);
-
-            int retVal = 0;
-            if (_selectedDevice == null && hasBTVars)
-            {
-                retVal += 1;
-            }
-            else
-            {
-                if ((_selectedDevice != null && _selectedDevice.ConnectionStatus == BluetoothConnectionStatus.Disconnected) && hasBTVars)
-                {
-                    retVal += 1;
                 }
                 else
                 {
-                    param = param.Replace("%NOW", DateTime.Now.ToLongDateString() + " " + DateTime.Now.ToLongTimeString() + " GMT " + DateTime.Now.ToLocalTime().ToString("%K"))
-                                 .Replace("%now", DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString())
-                                 .Replace("%HH", DateTime.Now.ToString("HH"))
-                                 .Replace("%hh", DateTime.Now.ToString("hh"))
-                                 .Replace("%mm", DateTime.Now.ToString("mm"))
-                                 .Replace("%ss", DateTime.Now.ToString("ss"))
-                                 .Replace("%D", DateTime.Now.ToLongDateString())
-                                 .Replace("%d", DateTime.Now.ToShortDateString())
-                                 .Replace("%T", DateTime.Now.ToLongTimeString() + " GMT " + DateTime.Now.ToLocalTime().ToString("%K"))
-                                 .Replace("%t", DateTime.Now.ToShortTimeString())
-                                 .Replace("%z", "GMT " + DateTime.Now.ToLocalTime().ToString("%K"))
-                                 .Replace("\\t", "\t")
-                                 .Replace("\\n", "\n")
-                                 .Replace("\\r", "\r");
-
-                    if (hasBTVars)
+                    if (existing.V2 && (existing.LastCmd == LastCmd.NONE) && !existing.PoweredOn)
                     {
-                        // This is more elegant way to get readable MAC address
-                        var macAddress = Regex.Replace(_selectedDevice.BluetoothAddress.ToString("X"), @"(.{2})", "$1:").TrimEnd(':');
-
-                        param = param.Replace("%mac", macAddress)
-                                     .Replace("%addr", _selectedDevice.BluetoothAddress.ToString())
-                                     .Replace("%name", _selectedDevice.Name)
-                                     .Replace("%id", _selectedDevice.DeviceId)
-                                     .Replace("%stat", (_selectedDevice.ConnectionStatus == BluetoothConnectionStatus.Connected).ToString());
-                        //.Replace("%c", );
+                        ChangeBSMsg(existing.Name, false, LastCmd.SLEEP, Action.NONE);
+                        return;
                     }
-                }
-            }
-
-            return retVal;
-        }
-
-        static async void PairBluetooth(string param)
-        {
-            DevicePairingResult result = null;
-            DeviceInformationPairing pairingInformation = _selectedDevice.DeviceInformation.Pairing;
-
-            await _selectedDevice.DeviceInformation.Pairing.UnpairAsync();
-
-            if (pairingInformation.CanPair)
-                result = await _selectedDevice.DeviceInformation.Pairing.PairAsync(pairingInformation.ProtectionLevel);
-
-        }
-
-        static void ChangeDisplayFormat(string param)
-        {
-            if (!string.IsNullOrEmpty(param))
-            {
-                switch (param.ToLower())
-                {
-                    case "ascii":
-                        _dataFormat = DataFormat.ASCII;
-                        break;
-                    case "utf8":
-                        _dataFormat = DataFormat.UTF8;
-                        break;
-                    case "dec":
-                    case "decimal":
-                        _dataFormat = DataFormat.Dec;
-                        break;
-                    case "bin":
-                    case "binary":
-                        _dataFormat = DataFormat.Bin;
-                        break;
-                    case "hex":
-                    case "hexdecimal":
-                        _dataFormat = DataFormat.Hex;
-                        break;
-                    default:
-                        break;
-                }
-            }
-            Trace.WriteLine($"Current display format: {_dataFormat.ToString()}");
-        }
-
-        static void Delay(string param)
-        {
-            uint milliseconds = (uint)_timeout.TotalMilliseconds;
-            uint.TryParse(param, out milliseconds);
-            _delayEvent = new ManualResetEvent(false);
-            _delayEvent.WaitOne((int)milliseconds, true);
-            _delayEvent = null;
-        }
-
-        static void ChangeTimeout(string param)
-        {
-            if (!string.IsNullOrEmpty(param))
-            {
-                uint t;
-                if (uint.TryParse(param, out t))
-                {
-                    if (t > 0 && t < 60)
-                    {
-                        _timeout = TimeSpan.FromSeconds(t);
-                    }
-                }
-            }
-            Trace.WriteLine($"Device connection timeout (sec): {_timeout.TotalSeconds}");
-        }
-
-        /// <summary>
-        /// List of available BLE devices
-        /// </summary>
-        /// <param name="param">optional, 'w' means "wide list"</param>
-        static void ListDevices(string param)
-        {
-
-            var names = _deviceList.OrderBy(d => d.Name).Where(d => !string.IsNullOrEmpty(d.Name)).Select(d => d.Name).ToList();
-            
-            string pattern = @"HTC BS(\s.*)";
-            string patternv2 = @"LHB-(.*)";
-
-            for (int i = 0; i < names.Count; i++) { 
-                  
-                Match m = Regex.Match(names[i].ToString(), pattern);
-                if (m.Success) {
-                    Trace.WriteLine($"FOUND BASESTATION={names[i]}");
-                    if (!bslist.Contains(names[i].ToString())) bslist.Add(names[i].ToString());
-                }
-
-                Match mv2 = Regex.Match(names[i].ToString(), patternv2);
-                if (mv2.Success)
-                {
-                    Trace.WriteLine($"FOUND BASESTATION={names[i]}");
-                    if (!bslist.Contains(names[i].ToString())) bslist.Add(names[i].ToString());
-                }
-
-                Trace.WriteLine($"#{i:00}: {names[i]}");
-            }
-        }
-
-        /// <summary>
-        /// Show status of the currently selected BLE device
-        /// </summary>
-        static void ShowStatus()
-        {
-            if (_selectedDevice == null)
-            {
-                Trace.WriteLine("No device connected.");
-            }
-            else
-            {
-                if (_selectedDevice.ConnectionStatus == BluetoothConnectionStatus.Disconnected)
-                {
-                    Trace.WriteLine($"Device {_selectedDevice.Name} is disconnected.");
-                }
-                else
-                {
-                    Trace.WriteLine($"Device {_selectedDevice.Name} is connected.");
-                    if (_services.Count() > 0)
-                    {
-                        // List all services
-                        Trace.WriteLine("Available services:");
-                        for (int i = 0; i < _services.Count(); i++)
-                            Trace.WriteLine($"#{i:00}: {_services[i].Name}");
-
-                        // If service is selected,
-                        if (_selectedService != null)
+                    if (existing.LastCmd != LastCmd.SLEEP)
                         {
-                            Trace.WriteLine($"Selected service: {_selectedService.Name}");
-
-                            // List all characteristics
-                            if (_characteristics.Count > 0)
-                            {
-                                Trace.WriteLine("Available characteristics:");
-
-                                for (int i = 0; i < _characteristics.Count(); i++)
-                                    Trace.WriteLine($"#{i:00}: {_characteristics[i].Name}\t{_characteristics[i].Chars}");
-
-                                if (_selectedCharacteristic != null)
-                                    Trace.WriteLine($"Selected characteristic: {_selectedCharacteristic.Name}");
-                            }
+                        if (0 == Interlocked.Exchange(ref processingCmd, 1))
+                        {
+                            ProcessLighthouseAsync(existing, "SLEEP").ConfigureAwait(true);
                         }
                     }
                 }
+
+                Thread.Sleep(100);
             }
+            catch (Exception ex)
+            {
+                HandleEx(ex);
+            }
+
         }
 
-        /// <summary>
-        /// Connect to the specific device by name or number, and make this device current
-        /// </summary>
-        /// <param name="deviceName"></param>
-        /// <returns></returns>
-        static async Task<int> OpenDevice(string deviceName)
+        private void BalloonMsg(string msg, ToolTipIcon level = ToolTipIcon.Warning)
         {
-            int retVal = 0;
-            if (!string.IsNullOrEmpty(deviceName))
-            {
-                var devs = _deviceList.OrderBy(d => d.Name).Where(d => !string.IsNullOrEmpty(d.Name)).ToList();
-                string foundId = Utilities.GetIdByNameOrNumber(devs, deviceName);
+            notifyIcon1.ShowBalloonTip(1000, null, msg, level);
+            Trace.WriteLine(msg);
+        }
 
-                // If device is found, connect to device and enumerate all services
-                if (!string.IsNullOrEmpty(foundId))
+        private async Task ProcessLighthouseAsync(Lighthouse lh, string command)
+        {
+            try
+            {
+                void exitProcess(string msg)
                 {
-                    _selectedCharacteristic = null;
+                    throw new ProcessError($"{msg}");
+                }
+
+                LogLine($"[{lh.Name}] START Processing command: {command}");
+
+                lh.Action = (command == "WAKEUP") ? Action.WAKEUP : Action.SLEEP;
+
+                ChangeBSMsg(lh.Name, lh.PoweredOn, lh.LastCmd, lh.Action);
+
+                if (lh.V2)
+                {
+
+                    //https://docs.microsoft.com/en-us/windows/uwp/devices-sensors/gatt-client
+                    var potentialLighthouseTask = BluetoothLEDevice.FromBluetoothAddressAsync(lh.Address).AsTask();
+                    potentialLighthouseTask.Wait();
+
+                    Thread.Sleep(_delayCmd);
+
+                    if (!potentialLighthouseTask.IsCompletedSuccessfully || potentialLighthouseTask.Result == null) exitProcess($"[{lh.Name}] Could not connect to lighthouse");
+
+                    using var btDevice = potentialLighthouseTask.Result;
+
+                    Thread.Sleep(_delayCmd);
+
+                    var gattServicesTask = btDevice.GetGattServicesAsync(BluetoothCacheMode.Uncached).AsTask();
+                    gattServicesTask.Wait();
+
+                    Thread.Sleep(_delayCmd);
+
+                    if (!gattServicesTask.IsCompletedSuccessfully || gattServicesTask.Result.Status != GattCommunicationStatus.Success) exitProcess($"[{lh.Name}] Failed to get services");
+
+                    LogLine($"[{lh.Name}] Got services");
+
+                    using var service = gattServicesTask.Result.Services.SingleOrDefault(s => s.Uuid == v2_powerGuid);
+
+                    Thread.Sleep(_delayCmd);
+
+                    if (service == null) exitProcess($"[{lh.Name}] Could not find power service");
+
+                    LogLine($"[{lh.Name}] Found power service");
+
+                    var powerCharacteristicsTask = service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached).AsTask();
+                    powerCharacteristicsTask.Wait();
+
+                    Thread.Sleep(_delayCmd);
+
+                    if (!powerCharacteristicsTask.IsCompletedSuccessfully || powerCharacteristicsTask.Result.Status != GattCommunicationStatus.Success)
+                        exitProcess($"[{lh.Name}] Could not get power service characteristics");
+
+                    var powerChar = powerCharacteristicsTask.Result.Characteristics.SingleOrDefault(c => c.Uuid == v2_powerCharacteristic);
+
+                    Thread.Sleep(_delayCmd);
+
+                    if (powerChar == null) exitProcess($"[{lh.Name}] Could not get power characteristic");
+
+                    Thread.Sleep(_delayCmd);
+
+                    LogLine($"[{lh.Name}] Found power characteristic");
+
+                    byte _command;
+                    
+                    _command = v2_OFF;
+                    if (command == "WAKEUP") _command = v2_ON;
+
+                    using var w = new DataWriter();
+                    w.WriteByte(_command);
+                    var buff = w.DetachBuffer();
+
+                    LogLine($"Sending {command} command to {lh.Name}");
+                    var writeResultTask = powerChar.WriteValueAsync(buff).AsTask();
+                    writeResultTask.Wait();
+
+                    Thread.Sleep(_delayCmd);
+
+                    if (!writeResultTask.IsCompletedSuccessfully || writeResultTask.Result != GattCommunicationStatus.Success) exitProcess($"[{lh.Name}] Failed to write {command} command");
+
+                    lh.LastCmd = (command == "WAKEUP") ? LastCmd.WAKEUP : LastCmd.SLEEP;
+                    lh.PoweredOn = (command == "WAKEUP") ? true : false;
+
+                    btDevice.Dispose();
+
+                    LogLine($"[{lh.Name}] SUCCESS command {command}");
+
+                    Thread.Sleep(_delayCmd);
+                }
+                else
+                {
+                    // V1 BASE STATION
+
+                    _dataFormat = DataFormat.Hex;
+
                     _selectedService = null;
                     _services.Clear();
 
-                    try
+                    _selectedDevice = await BluetoothLEDevice.FromBluetoothAddressAsync(lh.Address).AsTask().TimeoutAfter(_timeout);
+
+                    Thread.Sleep(_delayCmd);
+
+                    LogLine($"[{lh.Name}] Connecting to lighthouse");
+
+                    var result = await _selectedDevice.GetGattServicesAsync(BluetoothCacheMode.Uncached);
+
+                    if (result.Status != GattCommunicationStatus.Success) exitProcess($"[{lh.Name}] Failed to get services");
+
+                    LogLine($"[{lh.Name}] Found {result.Services.Count} services:");
+
+                    for (int i = 0; i < result.Services.Count; i++)
                     {
-                        // only allow for one connection to be open at a time
-                        if (_selectedDevice != null)
-                            CloseDevice();
-
-                        _selectedDevice = await BluetoothLEDevice.FromIdAsync(foundId).AsTask().TimeoutAfter(_timeout);
-                        Trace.WriteLine($"Connecting to {_selectedDevice.Name}.");
-
-                        var result = await _selectedDevice.GetGattServicesAsync(BluetoothCacheMode.Uncached);
-                        if (result.Status == GattCommunicationStatus.Success)
-                        {
-                            Trace.WriteLine($"Found {result.Services.Count} services:");
-
-                            for (int i = 0; i < result.Services.Count; i++)
-                            {
-                                var serviceToDisplay = new BluetoothLEAttributeDisplay(result.Services[i]);
-                                _services.Add(serviceToDisplay);
-                                Trace.WriteLine($"#{i:00}: {_services[i].Name}");
-                            }
-                        }
-                        else
-                        {
-                            sbError.Append($"Device {deviceName} is unreachable.");
-                            retVal += 1;
-                        }
+                        var serviceToDisplay = new BluetoothLEAttributeDisplay(result.Services[i]);
+                        _services.Add(serviceToDisplay);
+                        LogLine($"[{lh.Name}] #{i:00}: {_services[i].Name}");
                     }
-                    catch
+
+                    Thread.Sleep(_delayCmd);
+
+                    string foundName = Utilities.GetIdByNameOrNumber(_services, v1_powerService);
+
+                    if (foundName.ToString().Length < 1) exitProcess($"[{lh.Name}] Failed to retrieve power service characteristic");
+
+                    LogLine($"[{lh.Name}] SERVICE NAME WRITE POWER SERVICE CHAR: {foundName}");
+
+                    IReadOnlyList<GattCharacteristic> characteristics = new List<GattCharacteristic>();
+
+                    var attr = _services.FirstOrDefault(s => s.Name.Equals(foundName));
+
+                    var accessStatus = await attr.service.RequestAccessAsync();
+
+                    if (accessStatus != DeviceAccessStatus.Allowed) exitProcess($"[{lh.Name}] Failed to access power service");
+
+                    Thread.Sleep(_delayCmd);
+
+                    var chresult = await attr.service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached);
+                    if (chresult.Status != GattCommunicationStatus.Success) exitProcess($"[{lh.Name}] Failed to set power characteristic");
+
+                    Thread.Sleep(_delayCmd);
+
+                    characteristics = chresult.Characteristics;
+                    _selectedService = attr;
+                    _characteristics.Clear();
+
+                    LogLine($"[{lh.Name}] Selected service {attr.Name}");
+
+                    if (characteristics.Count <= 0) exitProcess($"[{lh.Name}] Service does not have any characteristic");
+
+                    LogLine($"[{lh.Name}] Characteristics:");
+
+                    for (int i = 0; i < characteristics.Count; i++)
                     {
-                        sbError.Append($"Device {deviceName} is unreachable.");
-                        retVal += 1;
+                        var charToDisplay = new BluetoothLEAttributeDisplay(characteristics[i]);
+                        _characteristics.Add(charToDisplay);
+                        LogLine($"[{lh.Name}] #{i:00}: {charToDisplay.Name}\t{charToDisplay.Chars}");
                     }
-                }
-                else
-                {
-                    retVal += 1;
-                }
-            }
-            else
-            {
-                sbError.Append("Device name can not be empty.");
-                retVal += 1;
-            }
-            return retVal;
-        }
 
-        /// <summary>
-        /// Disconnect current device and clear list of services and characteristics
-        /// </summary>
-        static void CloseDevice()
-        {
-            // Remove all subscriptions
-            if (_subscribers.Count > 0) Unsubscribe("all");
-
-            if (_selectedDevice != null)
-            {
-                Trace.WriteLine($"Device {_selectedDevice.Name} is disconnected.");
-
-                _services?.ForEach((s) => { s.service?.Dispose(); });
-                _services?.Clear();
-                _characteristics?.Clear();
-                _selectedDevice?.Dispose();
-            }
-        }
-
-        /// <summary>
-        /// Set active service for current device
-        /// </summary>
-        /// <param name="parameters"></param>
-        static async Task<int> SetService(string serviceName)
-        {
-            int retVal = 0;
-            if (_selectedDevice != null)
-            {
-                if (!string.IsNullOrEmpty(serviceName))
-                {
-                    string foundName = Utilities.GetIdByNameOrNumber(_services, serviceName);
-
-                    // If device is found, connect to device and enumerate all services
-                    if (!string.IsNullOrEmpty(foundName))
-                    {
-                        var attr = _services.FirstOrDefault(s => s.Name.Equals(foundName));
-                        IReadOnlyList<GattCharacteristic> characteristics = new List<GattCharacteristic>();
-
-                        try
-                        {
-                            // Ensure we have access to the device.
-                            var accessStatus = await attr.service.RequestAccessAsync();
-                            if (accessStatus == DeviceAccessStatus.Allowed)
-                            {
-                                // BT_Code: Get all the child characteristics of a service. Use the cache mode to specify uncached characterstics only 
-                                // and the new Async functions to get the characteristics of unpaired devices as well. 
-                                var result = await attr.service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached);
-                                if (result.Status == GattCommunicationStatus.Success)
-                                {
-                                    characteristics = result.Characteristics;
-                                    _selectedService = attr;
-                                    _characteristics.Clear();
-                                    Trace.WriteLine($"Selected service {attr.Name}.");
-
-                                    if (characteristics.Count > 0)
-                                    {
-                                        for (int i = 0; i < characteristics.Count; i++)
-                                        {
-                                            var charToDisplay = new BluetoothLEAttributeDisplay(characteristics[i]);
-                                            _characteristics.Add(charToDisplay);
-                                            Trace.WriteLine($"#{i:00}: {charToDisplay.Name}\t{charToDisplay.Chars}");
-                                        }
-                                    }
-                                    else
-                                    {
-                                        sbError.Append("Service don't have any characteristic.");
-                                        retVal += 1;
-                                    }
-                                }
-                                else
-                                {
-                                    sbError.Append("Error accessing service.");
-                                    retVal += 1;
-                                }
-                            }
-                            // Not granted access
-                            else
-                            {
-                                sbError.Append("Error accessing service.");
-                                retVal += 1;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            sbError.Append($"Restricted service. Can't read characteristics: {ex.Message}");
-                            retVal += 1;
-                        }
-                    }
-                    else
-                    {
-                        sbError.Append("Invalid service name or number");
-                        retVal += 1;
-                    }
-                }
-                else
-                {
-                    sbError.Append("Invalid service name or number");
-                    retVal += 1;
-                }
-            }
-            else
-            {
-                sbError.Append("Nothing to use, no BLE device connected.");
-                retVal += 1;
-            }
-
-            return retVal;
-        }
-
-        /// <summary>
-        /// This function reads data from the specific BLE characteristic 
-        /// </summary>
-        /// <param name="param"></param>
-        static async Task<int> ReadCharacteristic(string param)
-        {
-            int retVal = 0;
-            if (_selectedDevice != null)
-            {
-                if (!string.IsNullOrEmpty(param))
-                {
                     List<BluetoothLEAttributeDisplay> chars = new List<BluetoothLEAttributeDisplay>();
 
-                    string charName = string.Empty;
-                    var parts = param.Split('/');
-                    // Do we have parameter is in "service/characteristic" format?
-                    if (parts.Length == 2)
-                    {
-                        string serviceName = Utilities.GetIdByNameOrNumber(_services, parts[0]);
-                        charName = parts[1];
-
-                        // If device is found, connect to device and enumerate all services
-                        if (!string.IsNullOrEmpty(serviceName))
-                        {
-                            var attr = _services.FirstOrDefault(s => s.Name.Equals(serviceName));
-                            IReadOnlyList<GattCharacteristic> characteristics = new List<GattCharacteristic>();
-
-                            try
-                            {
-                                // Ensure we have access to the device.
-                                var accessStatus = await attr.service.RequestAccessAsync();
-                                if (accessStatus == DeviceAccessStatus.Allowed)
-                                {
-                                    var result = await attr.service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached);
-                                    if (result.Status == GattCommunicationStatus.Success)
-                                        characteristics = result.Characteristics;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                sbError.Append($"Restricted service. Can't read characteristics: {ex.Message}");
-                                retVal += 1;
-                            }
-
-                            foreach (var c in characteristics)
-                                chars.Add(new BluetoothLEAttributeDisplay(c));
-                        }
-                    }
-                    else if (parts.Length == 1)
-                    {
-                        if (_selectedService == null)
-                        {
-                            Trace.WriteLine("No service is selected.");
-                        }
-                        chars = new List<BluetoothLEAttributeDisplay>(_characteristics);
-                        charName = parts[0];
-                    }
-
-                    // Read characteristic
-                    if (chars.Count > 0 && !string.IsNullOrEmpty(charName))
-                    {
-                        string useName = Utilities.GetIdByNameOrNumber(chars, charName);
-                        var attr = chars.FirstOrDefault(c => c.Name.Equals(useName));
-                        if (attr != null && attr.characteristic != null)
-                        {
-                            // Read characteristic value
-                            GattReadResult result = await attr.characteristic.ReadValueAsync(BluetoothCacheMode.Uncached);
-
-                            if (result.Status == GattCommunicationStatus.Success)
-                                Trace.WriteLine(Utilities.FormatValue(result.Value, _dataFormat));
-                            else
-                            {
-                                sbError.Append($"Read failed: {result.Status}");
-                                retVal += 1;
-                            }
-                        }
-                        else
-                        {
-                            sbError.Append($"Invalid characteristic {charName}");
-                            retVal += 1;
-                        }
-                    }
-                    else
-                    {
-                        sbError.Append("Nothing to read, please specify characteristic name or #.");
-                        retVal += 1;
-                    }
-                }
-                else
-                {
-                    sbError.Append("Nothing to read, please specify characteristic name or #.");
-                    retVal += 1;
-                }
-            }
-            else
-            {
-                sbError.Append("No BLE device connected.");
-                retVal += 1;
-            }
-            return retVal;
-        }
-
-        /// <summary>
-        /// This function writes data from the specific BLE characteristic 
-        /// </summary>
-        /// <param name="param">
-        /// parameters should be:
-        ///    [char_name] or [service_name/char_name] - specific characteristics
-        ///    [data_value] - data to write; data will be interpreted depending of current display format,
-        ///    wrong data format will cause write fail
-        /// </param>
-        /// <param name="userInput">
-        /// we need whole user input (trimmed from spaces on beginning) in case of text input with spaces at the end
-        static async Task<int> WriteCharacteristic(string param)
-        {
-            int retVal = 0;
-            if (_selectedDevice != null)
-            {
-                if (!string.IsNullOrEmpty(param))
-                {
-                    List<BluetoothLEAttributeDisplay> chars = new List<BluetoothLEAttributeDisplay>();
-
-                    string charName = string.Empty;
-
-                    // First, split data from char name (it should be a second param)
-                    var parts = param.Split(' ');
-                    if (parts.Length < 2)
-                    {
-                        sbError.Append("Insufficient data for write, please provide characteristic name and data.");
-                        retVal += 1;
-                        return retVal;
-                    }
-
-                    // Now try to convert data to the byte array by current format
-                    string data = param.Substring(parts[0].Length + 1);
-                    if (string.IsNullOrEmpty(data))
-                    {
-                        sbError.Append("Insufficient data for write.");
-                        retVal += 1;
-                        return retVal;
-                    }
+                    string data = v1_OFF;
+                    if (command == "WAKEUP") data = v1_ON;
                     var buffer = Utilities.FormatData(data, _dataFormat);
-                    if (buffer != null)
-                    {
-                        // Now process service/characteristic names
-                        var charNames = parts[0].Split('/');
 
-                        // Do we have parameter is in "service/characteristic" format?
-                        if (charNames.Length == 2)
-                        {
-                            string serviceName = Utilities.GetIdByNameOrNumber(_services, charNames[0]);
-                            charName = charNames[1];
+                    LogLine($"[{lh.Name}] DATA BUFFER STRING: {data}");
 
-                            // If device is found, connect to device and enumerate all services
-                            if (!string.IsNullOrEmpty(serviceName))
-                            {
-                                var attr = _services.FirstOrDefault(s => s.Name.Equals(serviceName));
-                                IReadOnlyList<GattCharacteristic> characteristics = new List<GattCharacteristic>();
-                                try
-                                {
-                                    // Ensure we have access to the device.
-                                    var accessStatus = await attr.service.RequestAccessAsync();
-                                    if (accessStatus == DeviceAccessStatus.Allowed)
-                                    {
-                                        var result = await attr.service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached);
-                                        if (result.Status == GattCommunicationStatus.Success)
-                                            characteristics = result.Characteristics;
-                                    }
-                                    foreach (var c in characteristics)
-                                        chars.Add(new BluetoothLEAttributeDisplay(c));
-                                }
-                                catch (Exception ex)
-                                {
-                                    sbError.Append($"Restricted service. Can't read characteristics: {ex.Message}");
-                                    retVal += 1;
-                                    return retVal;
-                                }
-                            }
-                        }
-                        else if (charNames.Length == 1)
-                        {
-                            if (_selectedService == null)
-                            {
-                                sbError.Append("No service is selected.");
-                                retVal += 1;
-                            }
-                            chars = new List<BluetoothLEAttributeDisplay>(_characteristics);
-                            charName = parts[0];
-                        }
+                    if (_selectedService == null) exitProcess($"[{lh.Name}] No service is selected");
 
-                        // Write characteristic
-                        if (chars.Count > 0 && !string.IsNullOrEmpty(charName))
-                        {
-                            string useName = Utilities.GetIdByNameOrNumber(chars, charName);
-                            var attr = chars.FirstOrDefault(c => c.Name.Equals(useName));
-                            if (attr != null && attr.characteristic != null)
-                            {
-                                // Write data to characteristic
-                                GattWriteResult result = await attr.characteristic.WriteValueWithResultAsync(buffer);
-                                if (result.Status != GattCommunicationStatus.Success)
-                                {
-                                    sbError.Append($"Write failed: {result.Status}");
-                                    retVal += 1;
-                                }
-                            }
-                            else
-                            {
-                                sbError.Append($"Invalid characteristic {charName}");
-                                retVal += 1;
-                            }
-                        }
-                        else
-                        {
-                            sbError.Append("Please specify characteristic name or # for writing.");
-                            retVal += 1;
-                        }
-                    }
-                    else
-                    {
-                        sbError.Append("Incorrect data format.");
-                        retVal += 1;
-                    }
+                    chars = new List<BluetoothLEAttributeDisplay>(_characteristics);
+
+                    if (chars.Count < 1) exitProcess($"[{lh.Name}] Failed to retrieve characteristic");
+
+                    string serviceName = Utilities.GetIdByNameOrNumber(chars, v1_powerCharacteristic);
+                    LogLine($"[{lh.Name}] SERVICE NAME WRITE POWER CHAR: {serviceName}");
+
+                    var wrattr = chars.FirstOrDefault(c => c.Name.Equals(serviceName));
+                    if (wrattr == null || wrattr.characteristic == null) exitProcess($"[{lh.Name}] Invalid characteristic {serviceName}");
+
+                    Thread.Sleep(_delayCmd);
+
+                    GattWriteResult wrresult = await wrattr.characteristic.WriteValueWithResultAsync(buffer);
+
+                    if (wrresult.Status != GattCommunicationStatus.Success) exitProcess($"[{lh.Name}] Failed to write {command} characteristic");
+
+                    LogLine($"[{lh.Name}] SUCCESS to write {command} characteristic");
+
+                    lh.LastCmd = (command == "WAKEUP") ? LastCmd.WAKEUP : LastCmd.SLEEP;
+                    lh.PoweredOn = (command == "WAKEUP") ? true : false;
+
+                    _services?.ForEach((s) => { s.service?.Dispose(); });
+                    _services?.Clear();
+                    _characteristics?.Clear();
+                    _selectedDevice?.Dispose();
+
+                    Thread.Sleep(_delayCmd);
+
                 }
+
+                lh.Action = Action.NONE;
+
+                ChangeBSMsg(lh.Name, lh.PoweredOn, lh.LastCmd, lh.Action);
+
+                lh.TooManyErrors = true;
+
+                Interlocked.Exchange(ref processingCmd, 0);
+
+                LogLine($"[{lh.Name}] END Processing");
             }
-            else
+            catch (ProcessError ex)
             {
-                sbError.Append("No BLE device connected.");
-                retVal += 1;
+                LogLine($"[{lh.Name}] ERROR Processing ({lh.HowManyErrors}): {ex}");
+                Interlocked.Exchange(ref processingCmd, 0);
+                if (lh.TooManyErrors) BalloonMsg($"{ex.Message}");
+                lh.LastCmd = LastCmd.ERROR;
+                ChangeBSMsg(lh.Name, lh.PoweredOn, lh.LastCmd, lh.Action);
             }
-            return retVal;
-        }
-
-        /// <summary>
-        /// This function used to add "ValueChanged" event subscription
-        /// </summary>
-        /// <param name="param"></param>
-        static async Task<int> SubscribeToCharacteristic(string param)
-        {
-            int retVal = 0;
-            if (_selectedDevice != null)
+            catch (Exception ex)
             {
-                if (!string.IsNullOrEmpty(param))
-                {
-                    List<BluetoothLEAttributeDisplay> chars = new List<BluetoothLEAttributeDisplay>();
-
-                    string charName = string.Empty;
-                    var parts = param.Split('/');
-                    // Do we have parameter is in "service/characteristic" format?
-                    if (parts.Length == 2)
-                    {
-                        string serviceName = Utilities.GetIdByNameOrNumber(_services, parts[0]);
-                        charName = parts[1];
-
-                        // If device is found, connect to device and enumerate all services
-                        if (!string.IsNullOrEmpty(serviceName))
-                        {
-                            var attr = _services.FirstOrDefault(s => s.Name.Equals(serviceName));
-                            IReadOnlyList<GattCharacteristic> characteristics = new List<GattCharacteristic>();
-
-                            try
-                            {
-                                // Ensure we have access to the device.
-                                var accessStatus = await attr.service.RequestAccessAsync();
-                                if (accessStatus == DeviceAccessStatus.Allowed)
-                                {
-                                    var result = await attr.service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached);
-                                    if (result.Status == GattCommunicationStatus.Success)
-                                        characteristics = result.Characteristics;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Trace.WriteLine($"Restricted service. Can't subscribe to characteristics: {ex.Message}");
-                                retVal += 1;
-                            }
-
-                            foreach (var c in characteristics)
-                                chars.Add(new BluetoothLEAttributeDisplay(c));
-                        }
-                    }
-                    else if (parts.Length == 1)
-                    {
-                        if (_selectedService == null)
-                        {
-                            Trace.WriteLine("No service is selected.");
-                            retVal += 1;
-                            return retVal;
-                        }
-                        chars = new List<BluetoothLEAttributeDisplay>(_characteristics);
-                        charName = parts[0];
-                    }
-
-                    // Read characteristic
-                    if (chars.Count > 0 && !string.IsNullOrEmpty(charName))
-                    {
-                        string useName = Utilities.GetIdByNameOrNumber(chars, charName);
-                        var attr = chars.FirstOrDefault(c => c.Name.Equals(useName));
-                        if (attr != null && attr.characteristic != null)
-                        {
-                            // First, check for existing subscription
-                            if (!_subscribers.Contains(attr.characteristic))
-                            {
-                                var status = await attr.characteristic.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue.Notify);
-                                if (status == GattCommunicationStatus.Success)
-                                {
-                                    _subscribers.Add(attr.characteristic);
-                                    attr.characteristic.ValueChanged += Characteristic_ValueChanged;
-                                }
-                                else
-                                {
-                                    Trace.WriteLine($"Can't subscribe to characteristic {useName}");
-                                    retVal += 1;
-                                }
-                            }
-                            else
-                            {
-                                Trace.WriteLine($"Already subscribed to characteristic {useName}");
-                                retVal += 1;
-                            }
-                        }
-                        else
-                        {
-                            Trace.WriteLine($"Invalid characteristic {useName}");
-                            retVal += 1;
-                        }
-                    }
-                    else
-                    {
-                        Trace.WriteLine("Nothing to subscribe, please specify characteristic name or #.");
-                        retVal += 1;
-                    }
-                }
-                else
-                {
-                    Trace.WriteLine("Nothing to subscribe, please specify characteristic name or #.");
-                    retVal += 1;
-                }
+                LogLine($"[{lh.Name}] ERROR Exception Processing ({lh.HowManyErrors}): {ex}");
+                Interlocked.Exchange(ref processingCmd, 0);
+                lh.LastCmd = LastCmd.ERROR;
+                ChangeBSMsg(lh.Name, lh.PoweredOn, lh.LastCmd, lh.Action);
+                if (lh.TooManyErrors) HandleEx(ex);
             }
-            else
-            {
-                Trace.WriteLine("No BLE device connected.");
-                retVal += 1;
-            }
-            return retVal;
-        }
-
-        /// <summary>
-        /// This function is used to unsubscribe from "ValueChanged" event
-        /// </summary>
-        /// <param name="param"></param>
-        static async void Unsubscribe(string param)
-        {
-            if (_subscribers.Count == 0)
-            {
-                Trace.WriteLine("No subscription for value changes found.");
-            }
-            else if (string.IsNullOrEmpty(param))
-            {
-                Trace.WriteLine("Please specify characteristic name or # (for single subscription) or type \"unsubs all\" to remove all subscriptions");
-            }
-            // Unsubscribe from all value changed events
-            else if (param.Replace("/", "").ToLower().Equals("all"))
-            {
-                foreach (var sub in _subscribers)
-                {
-                    await sub.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue.None);
-                    sub.ValueChanged -= Characteristic_ValueChanged;
-                }
-                _subscribers.Clear();
-            }
-            // unsubscribe from specific event
-            else
-            {
-
-            }
-        }
-
-        /// <summary>
-        /// Event handler for ValueChanged callback
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="args"></param>
-        static void Characteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
-        {
-            if (_primed)
-            {
-                var newValue = Utilities.FormatValue(args.CharacteristicValue, _dataFormat);
-
-                Trace.WriteLine($"Value changed for {sender.Uuid}: {newValue}\nBLE: ");
-                if (_notifyCompleteEvent != null)
-                {
-                    _notifyCompleteEvent.Set();
-                    _notifyCompleteEvent = null;
-                }
-            }
-            else _primed = true;
-        }
-
-        static DeviceInformation FindKnownDevice(string deviceId)
-        {
-            foreach (var device in _deviceList)
-            {
-                if (device.Id == deviceId)
-                {
-                    return device;
-                }
-            }
-            return null;
         }
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
+            while (true)
+            {
+                if (0 == Interlocked.Exchange(ref processingCmd, 1)) break;
+                Thread.Sleep(100);
+            }
 
         }
 
         private void Form1_FormClosed(object sender, FormClosedEventArgs e)
         {
+            traceDbg.Close();
+            traceEx.Close();
         }
 
         private void quitToolStripMenuItem_Click(object sender, EventArgs e)
         {
             Application.Exit();
-        }
-
-        private void toolStripMenuItem2_Click(object sender, EventArgs e)
-        {
-            BS_cmd("sleep");
         }
 
         private void createDesktopShortcutToolStripMenuItem_Click(object sender, EventArgs e)
@@ -1699,20 +913,19 @@ namespace BSManager
         private void toolStripRunAtStartup_Click(object sender, EventArgs e)
         {
 
-            RegistryKey registryStart = Registry.CurrentUser.OpenSubKey ("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
-
-            if (!toolStripRunAtStartup.Checked)
+            using (RegistryKey registryStart = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
             {
-                registryStart.SetValue("BSManager", Application.ExecutablePath);
-                toolStripRunAtStartup.Checked = true;
+                if (!toolStripRunAtStartup.Checked)
+                {
+                    registryStart.SetValue("BSManager", Application.ExecutablePath);
+                    toolStripRunAtStartup.Checked = true;
+                }
+                else
+                {
+                    registryStart.DeleteValue("BSManager", false);
+                    toolStripRunAtStartup.Checked = false;
+                }
             }
-            else
-            {
-                registryStart.DeleteValue("BSManager", false);
-                toolStripRunAtStartup.Checked = false;
-            }
-
-            registryStart.Dispose();
 
         }
 
@@ -1740,5 +953,54 @@ namespace BSManager
                 return path;
             }
         }
+
+        public new void Dispose()
+        {
+            watcher.Stop();
+            Dispose(true);
+        }
+
+        private void toolStripDebugLog_Click(object sender, EventArgs e)
+        {
+
+            using (RegistryKey registryDebug = Registry.CurrentUser.OpenSubKey("SOFTWARE\\ManniX\\BSManager", true))
+            {
+                if (!toolStripDebugLog.Checked)
+                {
+                    registryDebug.SetValue("DebugLog", "1");
+                    toolStripDebugLog.Checked = true;
+                }
+                else
+                {
+                    registryDebug.DeleteValue("DebugLog", false);
+                    toolStripDebugLog.Checked = false;
+                }
+
+            }
+
+        }
     }
+    public class ProcessError : Exception
+    {
+        public ProcessError()
+        {
+        }
+
+        public ProcessError(string message) : base(message)
+        {
+        }
+
+        public ProcessError(string message, Exception innerException) : base(message, innerException)
+        {
+        }
+
+        protected ProcessError(SerializationInfo info, StreamingContext context) : base(info, context)
+        {
+        }
+
+        ProcessError(int severity, string message) : base(message)
+        {
+        }
+    }
+
 }

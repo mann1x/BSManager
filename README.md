@@ -5,7 +5,7 @@ BSManager is a small portable utility to switch automatically on and off the Viv
 
 It does support all Pimax models and the Vive Pro headsets.
 
-Currently supports only Base Stations v1. Blind experimental Support for Base Stations v2.
+Base Stations v1 and v2 are both supported.
 
 
 ## **USE AT YOUR OWN RISK**
@@ -19,7 +19,11 @@ Move it into a permanent directory, you can create a shortcut to launch it or us
 
 If you wish in the dropdown menu you can also select "Run at Startup" and it will be run at every current user logon.
 
-To control the Base Stations you need a BLE adapter and pair the Base Stations in Windows (their name starts with "HTC BS "). The HeadSet Bluetooth adapter can't used.
+To control the Base Stations you need a BLE adapter. The HeadSet Bluetooth adapter, if any, can't used.
+
+In theory there's no need to pair the Base Stations in Windows but if they are not seen try it (their name starts with "HTC BS " or "LHB-").
+
+If you get many errors or can't see the Base Stations they are too far from to the USB dongle/antenna, shorten the distance.
 
 
 ## Usage
@@ -30,23 +34,41 @@ There's no main window, only the dropdown menu accessible clicking with right mo
 ![Tray Menu Picture](https://github.com/mann1x/BSManager/raw/master/BSManager/BSManager_tray.png)
 
 
-You can check the BS discovered, the HMD status, configure the startup, the Steam VR DB and send a sleep command.
+You can check the BS discovered, the HMD status, configure the startup, the Steam VR DB and enable logging (it will create a BSManager.log file).
 
-At startup if the HMD is found active the software will send the base stations a wakeup command.
+At startup if the HMD is found active the software will send the base stations a wakeup command or a sleep command if the HMD is off (this only for v1).
 
-Base stations are discovered via BLE at boot. Discovery will run for 20 cycles before giving up. In case the BS are found in the Steam DB discovery will search till the same number is found via BLE.
+Base stations are not discovered, the App will listen to BLE Advertisment messages.
+
+The 2nd number is "Discovered:" after the / is the count of Base Stations found in the SteamVR database.
+
+The icon on the left of the Base Station will change upon a correct Wakeup or Sleep command is received. After the name the pending action, if any, is displayed.
+
+Only for the BS v2 if the last issued command is Sleep and the Base Stations are still On after 5 minutes the command will be re-sent.
 
 **Please use the Issues tab on GitHub if you find issues or have a request**
 
-Almost all excellent BLEConsole from SeNSSoFT is included for easy troubleshooting and upgrade/evolutions (https://github.com/sensboston/BLEConsole).
+
+## Credits
+
+    - The excellent BLEConsole from SeNSSoFT (https://github.com/sensboston/BLEConsole).
+    - LightHouseController from Alex Flynn (https://bitbucket.org/Flynny75/lighthousecontroller/src/master/).
+    - SparkerInVR's great support in testing (https://www.twitch.tv/sparkerinvr).
 
 
 ## Compilation
 
 You can compile with Visual Studio 2019 and .NET 5.
 
+
 ## Changelog:
 
+- v2.0.0
+    - New: Support for Base Stations v2
+    - New: Removed discovery to use BLE Advertisement messages instead
+    - New: Icon to display BD status, action pending
+    - New: Switch to enable/disable Debug Log
+    - Fix: Many fixes and code improvements
 - v1.2.5
     - Fix: Tentative fix for BS v2, wrong characteristic
     - Fix: Improved reliability of SteamVR DB parsing
