@@ -7,7 +7,7 @@ namespace BSManager
     {
         public string Name { get; private set; }
         public ulong Address { get; private set; }
-
+        public bool ProcessDone { get; set; }
         public bool PoweredOn { get; set; }
         public bool V2PoweredOn { get; set; }
         public int LastPowerState { get; set; }
@@ -74,6 +74,7 @@ namespace BSManager
             Action = Action.NONE;
             _errCnt = 0;
             LastPowerState = 0;
+            ProcessDone = false;
         }
 
         public override bool Equals(object obj)

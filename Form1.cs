@@ -1,17 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Management;
 using System.Diagnostics;
-using Windows.Foundation;
-using Windows.System;
-using System.Runtime.InteropServices;
 using Windows.Devices.Enumeration;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
@@ -19,7 +14,6 @@ using Windows.Devices.Bluetooth.Advertisement;
 using Windows.Storage.Streams;
 using System.Reflection;
 using System.Threading;
-using System.Text.RegularExpressions;
 using Microsoft.Win32;
 using System.IO;
 using Newtonsoft.Json;
@@ -27,6 +21,7 @@ using Newtonsoft.Json.Linq;
 using IWshRuntimeLibrary;
 using AutoUpdaterDotNET;
 using System.Runtime.Serialization;
+using System.Timers;
 
 namespace BSManager
 {
@@ -61,6 +56,8 @@ namespace BSManager
 
         private HashSet<Lighthouse> _lighthouses = new HashSet<Lighthouse>();
         private BluetoothLEAdvertisementWatcher watcher;
+        private ManagementEventWatcher insertWatcher;
+        private ManagementEventWatcher removeWatcher;
 
         private int _delayCmd = 500;
 
@@ -74,16 +71,26 @@ namespace BSManager
         private readonly string v1_powerService = "51968";
         private readonly string v1_powerCharacteristic = "51969";
 
-        private static int processingCmd = 0;
+        private int _V2DoubleCheckMin = 5;
+        private bool V2BaseStations = false;
 
         public bool HeadSetState = false;
 
+        private static int processingCmdSync = 0;
+        private static int processingLHSync = 0;
+
+        private int ProcessLHtimerCycle = 1000;
+
         public Thread thrUSBDiscovery;
+        public Thread thrProcessLH;
+
+        private DateTime LastCmdStamp;
+        private LastCmd LastCmdSent;
+
+        System.Timers.Timer ProcessLHtimer = new System.Timers.Timer();
 
         private TextWriterTraceListener traceEx = new TextWriterTraceListener("BSManager_exceptions.log", "BSManagerEx");
         private TextWriterTraceListener traceDbg = new TextWriterTraceListener("BSManager.log", "BSManagerDbg");
-
-        // ENABLE DEBUG LOD
 
         private bool debugLog = false;
 
@@ -161,6 +168,10 @@ namespace BSManager
                     ChangeHMDStrip($" {_hmd} ON ", true);
                     this.notifyIcon1.Icon = Resource1.bsmanager_on;
                     HeadSetState = true;
+                    foreach (Lighthouse lh in _lighthouses)
+                    {
+                        lh.ProcessDone = false;
+                    }
                 }
             }
             catch (Exception ex)
@@ -184,6 +195,10 @@ namespace BSManager
                     ChangeHMDStrip($" {_hmd} OFF ", false);
                     this.notifyIcon1.Icon = (Icon)(resources.GetObject("notifyIcon1.Icon"));
                     HeadSetState = false;
+                    foreach (Lighthouse lh in _lighthouses)
+                    {
+                        lh.ProcessDone = false;
+                    }
                 }
             }
             catch (Exception ex)
@@ -275,7 +290,7 @@ namespace BSManager
 
                 LogLine($"STARTED ");
                 LogLine($"Version: {_versionInfo}");
-
+                
                 AutoUpdater.ReportErrors = false;
                 AutoUpdater.InstalledVersion = new Version(_versionInfo);
                 AutoUpdater.DownloadPath = Application.StartupPath;
@@ -300,14 +315,15 @@ namespace BSManager
 
                 WqlEventQuery insertQuery = new WqlEventQuery("SELECT * FROM __InstanceCreationEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_USBHub'");
 
-                ManagementEventWatcher insertWatcher = new ManagementEventWatcher(insertQuery);
+                insertWatcher = new ManagementEventWatcher(insertQuery);
                 insertWatcher.EventArrived += new EventArrivedEventHandler(DeviceInsertedEvent);
                 insertWatcher.Start();
 
                 WqlEventQuery removeQuery = new WqlEventQuery("SELECT * FROM __InstanceDeletionEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_USBHub'");
-                ManagementEventWatcher removeWatcher = new ManagementEventWatcher(removeQuery);
+                removeWatcher = new ManagementEventWatcher(removeQuery);
                 removeWatcher.EventArrived += new EventArrivedEventHandler(DeviceRemovedEvent);
                 removeWatcher.Start();
+
 
                 watcher = new BluetoothLEAdvertisementWatcher();
                 watcher.Received += AdvertisementWatcher_Received;
@@ -315,10 +331,18 @@ namespace BSManager
                 thrUSBDiscovery = new Thread(RunUSBDiscovery);
                 thrUSBDiscovery.Start();
 
-                Thread.Sleep(500);
+                //Thread.Sleep(500);
+                thrProcessLH = new Thread(RunProcessLH);
 
-                watcher.Start();
-
+                while (true)
+                {
+                    if(!thrUSBDiscovery.IsAlive)
+                    {
+                        LogLine("Starting ProcessLH Thread");
+                        thrProcessLH.Start();
+                        break;
+                    }
+                }
 
                 lhfound = Read_SteamVR_config();
                 if (!lhfound)
@@ -339,8 +363,6 @@ namespace BSManager
                     }                
                 }
 
-                //BS_discover();
-
             }
             catch (Exception ex)
             {
@@ -348,9 +370,97 @@ namespace BSManager
             }
 
         }
+        private void ProcessLH_ElapsedEventHandler(object sender, ElapsedEventArgs e)
+        {
+            int sync = Interlocked.CompareExchange(ref processingLHSync, 1, 0);
+            if (sync == 0)
+            {
+                OnProcessLH(sender, e);
+                processingLHSync = 0;
+            }
+        }
+
+        public void ProcessWatcher(bool start)
+        {
+            if (start)
+            {
+                if (watcher.Status == BluetoothLEAdvertisementWatcherStatus.Stopped || watcher.Status == BluetoothLEAdvertisementWatcherStatus.Created)
+                {
+                    LogLine($"Starting BLE Watcher Status: {watcher.Status}");
+                    watcher.Start();
+                    Thread.Sleep(250);
+                    LogLine($"Started BLE Watcher Status: {watcher.Status}");
+                }
+            }
+            else
+            {
+                if (watcher.Status == BluetoothLEAdvertisementWatcherStatus.Started && watcher.Status != BluetoothLEAdvertisementWatcherStatus.Stopping)
+                {
+                    LogLine($"Stopping BLE Watcher Status: {watcher.Status}");
+                    watcher.Stop();
+                    Thread.Sleep(250);
+                    LogLine($"Stopped BLE Watcher Status: {watcher.Status}");
+                }
+            }
+        }
+
+        public void OnProcessLH(object sender, ElapsedEventArgs args)
+        {
+            try
+            {
+                bool _done = true;
+
+                if (V2BaseStations && LastCmdSent == LastCmd.SLEEP && !HeadSetState)
+                    {
+                    TimeSpan _delta = DateTime.Now - LastCmdStamp;
+
+                    LogLine($"LastCmdSent {LastCmdSent} _delta {_delta}");
+
+                    if (_delta.Minutes >= _V2DoubleCheckMin)
+                    {
+                        foreach (Lighthouse lh in _lighthouses)
+                        {
+                            lh.ProcessDone = false;
+                        }
+                    }
+                }
+
+                foreach (Lighthouse _lh in _lighthouses)
+                {
+                    if (_lh.ProcessDone == false) _done = false;
+                }
+
+                if (_lighthouses.Count == 0 || _lighthouses.Count < bsCount)
+                {
+                    ProcessWatcher(true);
+                }
+                else if(_done)
+                {
+                    ProcessWatcher(false);
+                }
+                else
+                {
+                    ProcessWatcher(true);
+                }
+                Thread.Sleep(ProcessLHtimerCycle);
+            }
+            catch (Exception ex)
+            {
+                HandleEx(ex);
+            }
+        }
+
+
         void RunUSBDiscovery()
         {
             USBDiscovery();
+        }
+
+        void RunProcessLH()
+        {
+            ProcessLHtimer.Interval = ProcessLHtimerCycle;
+            ProcessLHtimer.Elapsed += new ElapsedEventHandler(ProcessLH_ElapsedEventHandler);
+            ProcessLHtimer.Start();
         }
 
         private void AutoUpdaterOnParseUpdateInfoEvent(ParseUpdateInfoEventArgs args)
@@ -491,9 +601,9 @@ namespace BSManager
                 using (StreamReader r = new StreamReader(steamvr_lhjson))
                 {
                     string json = r.ReadToEnd();
-                    LogLine($"JSON LEN={json.Length}");
+                    LogLine($"SteamDB JSON Length={json.Length}");
                     JObject o = JObject.Parse(json);
-                    LogLine($"JSON PARSED");
+                    LogLine($"SteamDB JSON Parsed");
 
                     bsTokens = o.SelectTokens("$..base_serial_number");
 
@@ -503,14 +613,15 @@ namespace BSManager
                     foreach (JToken bsitem in bsTokens)
                     {
                         if (!bsSerials.Contains(bsitem.ToString())) bsSerials.Add(bsitem.ToString());
-                        LogLine($"BSITEM={bsitem}");
+                        LogLine($"Base Station Serial={bsitem}");
                         _curbs++;
                         if (_curbs > _maxbs) break;
                     }
 
-                    LogLine($"BSSERIALS=" + string.Join(", ", bsSerials));
+                    LogLine($"Base Stations List=" + string.Join(", ", bsSerials));
 
                     bsCount = bsSerials.Count();
+                    LogLine($"Base Stations in SteamDB: {bsCount}");
                     return true;
 
 
@@ -525,7 +636,7 @@ namespace BSManager
 
         private void AdvertisementWatcher_Received(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
         {
-            try { 
+            try {
 
                 //Trace.WriteLine($"Advertisment: {args.Advertisement.LocalName}");
 
@@ -567,26 +678,34 @@ namespace BSManager
                         //existing.PoweredOn = data[4] == 0x03;
                         //LogLine($"{existing.Name} power status {intpstate} last {existing.lastPowerState} PoweredOn={existing.PoweredOn}");
                     }
-
+                    
+                    V2BaseStations = true;
                     existing.V2 = true;
+
+                    if (existing.V2PoweredOn && existing.LastCmd == LastCmd.SLEEP && !HeadSetState)
+                    {
+                        TimeSpan _delta = DateTime.Now - existing.LastCmdStamp;
+                        if (_delta.Minutes >= _V2DoubleCheckMin)
+                        {
+                            if (0 == Interlocked.Exchange(ref processingCmdSync, 1))
+                            {
+                                LogLine($"Processing SLEEP check {_V2DoubleCheckMin} minutes still ON for: {existing.Name}");
+                                ProcessLighthouseAsync(existing, "SLEEP").ConfigureAwait(true);
+                                existing.ProcessDone = true;
+                            }
+                        }
+                        else
+                        {
+                            existing.ProcessDone = true;
+                        }
+                    }
+
                 }
                 else 
                 {                    
                     existing.V2 = false;
                 }
 
-                if (existing.V2 && existing.V2PoweredOn && existing.LastCmd == LastCmd.SLEEP && !HeadSetState)
-                {
-                    TimeSpan _delta = DateTime.Now - existing.LastCmdStamp;
-                    if (_delta.Minutes > 5)
-                    {
-                        if (0 == Interlocked.Exchange(ref processingCmd, 1))
-                        {
-                            LogLine($"Processing SLEEP check 5 minutes still ON for: {existing.Name}");
-                            ProcessLighthouseAsync(existing, "SLEEP").ConfigureAwait(true);
-                        }
-                    }
-                }
 
                 if (HeadSetState)
                 {
@@ -597,7 +716,7 @@ namespace BSManager
                     }
                     if (existing.LastCmd != LastCmd.WAKEUP)
                     {
-                        if (0 == Interlocked.Exchange(ref processingCmd, 1)) 
+                        if (0 == Interlocked.Exchange(ref processingCmdSync, 1)) 
                         { 
                             ProcessLighthouseAsync(existing, "WAKEUP").ConfigureAwait(true);
                         }
@@ -612,7 +731,7 @@ namespace BSManager
                     }
                     if (existing.LastCmd != LastCmd.SLEEP)
                         {
-                        if (0 == Interlocked.Exchange(ref processingCmd, 1))
+                        if (0 == Interlocked.Exchange(ref processingCmdSync, 1))
                         {
                             ProcessLighthouseAsync(existing, "SLEEP").ConfigureAwait(true);
                         }
@@ -751,6 +870,7 @@ namespace BSManager
                         var serviceToDisplay = new BluetoothLEAttributeDisplay(result.Services[i]);
                         _services.Add(serviceToDisplay);
                         LogLine($"[{lh.Name}] #{i:00}: {_services[i].Name}");
+                        serviceToDisplay = null;
                     }
 
                     Thread.Sleep(_delayCmd);
@@ -828,25 +948,37 @@ namespace BSManager
                     _services?.Clear();
                     _characteristics?.Clear();
                     _selectedDevice?.Dispose();
+                    
+                    result = null;
+                    attr = null;
+                    chresult = null;
+                    buffer = null;
+                    chars = null;
+                    wrattr = null;
 
                     Thread.Sleep(_delayCmd);
 
                 }
 
+                LastCmdSent = lh.LastCmd;
+                LastCmdStamp = DateTime.Now;
+
                 lh.Action = Action.NONE;
+
+                lh.ProcessDone = true;
 
                 ChangeBSMsg(lh.Name, lh.PoweredOn, lh.LastCmd, lh.Action);
 
                 lh.TooManyErrors = true;
 
-                Interlocked.Exchange(ref processingCmd, 0);
+                Interlocked.Exchange(ref processingCmdSync, 0);
 
                 LogLine($"[{lh.Name}] END Processing");
             }
             catch (ProcessError ex)
             {
                 LogLine($"[{lh.Name}] ERROR Processing ({lh.HowManyErrors}): {ex}");
-                Interlocked.Exchange(ref processingCmd, 0);
+                Interlocked.Exchange(ref processingCmdSync, 0);
                 if (lh.TooManyErrors) BalloonMsg($"{ex.Message}");
                 lh.LastCmd = LastCmd.ERROR;
                 ChangeBSMsg(lh.Name, lh.PoweredOn, lh.LastCmd, lh.Action);
@@ -854,7 +986,7 @@ namespace BSManager
             catch (Exception ex)
             {
                 LogLine($"[{lh.Name}] ERROR Exception Processing ({lh.HowManyErrors}): {ex}");
-                Interlocked.Exchange(ref processingCmd, 0);
+                Interlocked.Exchange(ref processingCmdSync, 0);
                 lh.LastCmd = LastCmd.ERROR;
                 ChangeBSMsg(lh.Name, lh.PoweredOn, lh.LastCmd, lh.Action);
                 if (lh.TooManyErrors) HandleEx(ex);
@@ -865,7 +997,7 @@ namespace BSManager
         {
             while (true)
             {
-                if (0 == Interlocked.Exchange(ref processingCmd, 1)) break;
+                if (0 == Interlocked.Exchange(ref processingCmdSync, 1)) break;
                 Thread.Sleep(100);
             }
 
@@ -956,6 +1088,10 @@ namespace BSManager
 
         public new void Dispose()
         {
+            ProcessLHtimer.Enabled = false;
+            ProcessLHtimer.Stop();
+            removeWatcher.Stop();
+            insertWatcher.Stop();
             watcher.Stop();
             Dispose(true);
         }
