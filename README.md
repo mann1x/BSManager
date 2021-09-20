@@ -46,6 +46,8 @@ The icon on the left of the Base Station will change upon a correct Wakeup or Sl
 
 Only for the BS v2 if the last issued command is Sleep and the Base Stations are still On after 5 minutes the command will be re-sent.
 
+Only for the BS v1 the Stations will be briefly powered on, about 30 seconds, to set the Sleep mode (they don't report the power state).
+
 **Please use the Issues tab on GitHub if you find issues or have a request**
 
 
