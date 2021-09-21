@@ -36,15 +36,8 @@ namespace BSManager
 
         static IEnumerable<JToken> bsTokens;
 
-        static BluetoothLEDevice _selectedDevice = null;
-
-        static List<BluetoothLEAttributeDisplay> _services = new List<BluetoothLEAttributeDisplay>();
-        static BluetoothLEAttributeDisplay _selectedService = null;
-
-        static List<BluetoothLEAttributeDisplay> _characteristics = new List<BluetoothLEAttributeDisplay>();
-
         // Current data format
-        static DataFormat _dataFormat = DataFormat.UTF8;
+        static DataFormat _dataFormat = DataFormat.Hex;
 
         static string _versionInfo;
 
@@ -61,15 +54,17 @@ namespace BSManager
 
         private int _delayCmd = 500;
 
-        private const byte v2_ON = 0x01;
-        private const byte v2_OFF = 0x00;
+        private const string v2_ON = "01";
+        private const string v2_OFF = "00";
+
         private readonly Guid v2_powerGuid = Guid.Parse("00001523-1212-efde-1523-785feabcd124");
         private readonly Guid v2_powerCharacteristic = Guid.Parse("00001525-1212-efde-1523-785feabcd124");
 
         private const string v1_ON = "12 00 00 28 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00";
         private const string v1_OFF = "12 01 00 28 FF FF FF FF 00 00 00 00 00 00 00 00 00 00 00 00";
-        private readonly string v1_powerService = "51968";
-        private readonly string v1_powerCharacteristic = "51969";
+
+        private readonly Guid v1_powerGuid = Guid.Parse("0000cb00-0000-1000-8000-00805f9b34fb");
+        private readonly Guid v1_powerCharacteristic = Guid.Parse("0000cb01-0000-1000-8000-00805f9b34fb");
 
         private int _V2DoubleCheckMin = 5;
         private bool V2BaseStations = false;
@@ -414,7 +409,7 @@ namespace BSManager
                     {
                     TimeSpan _delta = DateTime.Now - LastCmdStamp;
 
-                    LogLine($"LastCmdSent {LastCmdSent} _delta {_delta}");
+                    //LogLine($"LastCmdSent {LastCmdSent} _delta {_delta}");
 
                     if (_delta.Minutes >= _V2DoubleCheckMin)
                     {
@@ -690,7 +685,7 @@ namespace BSManager
                             if (0 == Interlocked.Exchange(ref processingCmdSync, 1))
                             {
                                 LogLine($"Processing SLEEP check {_V2DoubleCheckMin} minutes still ON for: {existing.Name}");
-                                ProcessLighthouseAsync(existing, "SLEEP").ConfigureAwait(true);
+                                ProcessLighthouseAsync(existing, "SLEEP");
                                 existing.ProcessDone = true;
                             }
                         }
@@ -718,7 +713,7 @@ namespace BSManager
                     {
                         if (0 == Interlocked.Exchange(ref processingCmdSync, 1)) 
                         { 
-                            ProcessLighthouseAsync(existing, "WAKEUP").ConfigureAwait(true);
+                            ProcessLighthouseAsync(existing, "WAKEUP");
                         }
                     }
                 }
@@ -733,7 +728,7 @@ namespace BSManager
                         {
                         if (0 == Interlocked.Exchange(ref processingCmdSync, 1))
                         {
-                            ProcessLighthouseAsync(existing, "SLEEP").ConfigureAwait(true);
+                            ProcessLighthouseAsync(existing, "SLEEP");
                         }
                     }
                 }
@@ -753,7 +748,7 @@ namespace BSManager
             Trace.WriteLine(msg);
         }
 
-        private async Task ProcessLighthouseAsync(Lighthouse lh, string command)
+        private void ProcessLighthouseAsync(Lighthouse lh, string command)
         {
             try
             {
@@ -768,197 +763,105 @@ namespace BSManager
 
                 ChangeBSMsg(lh.Name, lh.PoweredOn, lh.LastCmd, lh.Action);
 
+
+                Guid _powerServGuid = v1_powerGuid;
+                Guid _powerCharGuid = v1_powerCharacteristic;
+                
                 if (lh.V2)
                 {
-
-                    //https://docs.microsoft.com/en-us/windows/uwp/devices-sensors/gatt-client
-                    var potentialLighthouseTask = BluetoothLEDevice.FromBluetoothAddressAsync(lh.Address).AsTask();
-                    potentialLighthouseTask.Wait();
-
-                    Thread.Sleep(_delayCmd);
-
-                    if (!potentialLighthouseTask.IsCompletedSuccessfully || potentialLighthouseTask.Result == null) exitProcess($"[{lh.Name}] Could not connect to lighthouse");
-
-                    using var btDevice = potentialLighthouseTask.Result;
-
-                    Thread.Sleep(_delayCmd);
-
-                    var gattServicesTask = btDevice.GetGattServicesAsync(BluetoothCacheMode.Uncached).AsTask();
-                    gattServicesTask.Wait();
-
-                    Thread.Sleep(_delayCmd);
-
-                    if (!gattServicesTask.IsCompletedSuccessfully || gattServicesTask.Result.Status != GattCommunicationStatus.Success) exitProcess($"[{lh.Name}] Failed to get services");
-
-                    LogLine($"[{lh.Name}] Got services");
-
-                    using var service = gattServicesTask.Result.Services.SingleOrDefault(s => s.Uuid == v2_powerGuid);
-
-                    Thread.Sleep(_delayCmd);
-
-                    if (service == null) exitProcess($"[{lh.Name}] Could not find power service");
-
-                    LogLine($"[{lh.Name}] Found power service");
-
-                    var powerCharacteristicsTask = service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached).AsTask();
-                    powerCharacteristicsTask.Wait();
-
-                    Thread.Sleep(_delayCmd);
-
-                    if (!powerCharacteristicsTask.IsCompletedSuccessfully || powerCharacteristicsTask.Result.Status != GattCommunicationStatus.Success)
-                        exitProcess($"[{lh.Name}] Could not get power service characteristics");
-
-                    var powerChar = powerCharacteristicsTask.Result.Characteristics.SingleOrDefault(c => c.Uuid == v2_powerCharacteristic);
-
-                    Thread.Sleep(_delayCmd);
-
-                    if (powerChar == null) exitProcess($"[{lh.Name}] Could not get power characteristic");
-
-                    Thread.Sleep(_delayCmd);
-
-                    LogLine($"[{lh.Name}] Found power characteristic");
-
-                    byte _command;
-                    
-                    _command = v2_OFF;
-                    if (command == "WAKEUP") _command = v2_ON;
-
-                    using var w = new DataWriter();
-                    w.WriteByte(_command);
-                    var buff = w.DetachBuffer();
-
-                    LogLine($"Sending {command} command to {lh.Name}");
-                    var writeResultTask = powerChar.WriteValueAsync(buff).AsTask();
-                    writeResultTask.Wait();
-
-                    Thread.Sleep(_delayCmd);
-
-                    if (!writeResultTask.IsCompletedSuccessfully || writeResultTask.Result != GattCommunicationStatus.Success) exitProcess($"[{lh.Name}] Failed to write {command} command");
-
-                    lh.LastCmd = (command == "WAKEUP") ? LastCmd.WAKEUP : LastCmd.SLEEP;
-                    lh.PoweredOn = (command == "WAKEUP") ? true : false;
-
-                    btDevice.Dispose();
-
-                    LogLine($"[{lh.Name}] SUCCESS command {command}");
-
-                    Thread.Sleep(_delayCmd);
+                    _powerServGuid = v2_powerGuid;
+                    _powerCharGuid = v2_powerCharacteristic;
                 }
-                else
+                //https://docs.microsoft.com/en-us/windows/uwp/devices-sensors/gatt-client
+                var potentialLighthouseTask = BluetoothLEDevice.FromBluetoothAddressAsync(lh.Address).AsTask();
+                potentialLighthouseTask.Wait();
+
+                Thread.Sleep(_delayCmd);
+
+                if (!potentialLighthouseTask.IsCompletedSuccessfully || potentialLighthouseTask.Result == null) exitProcess($"[{lh.Name}] Could not connect to lighthouse");
+
+                using var btDevice = potentialLighthouseTask.Result;
+
+                Thread.Sleep(_delayCmd);
+
+                var gattServicesTask = btDevice.GetGattServicesAsync(BluetoothCacheMode.Uncached).AsTask();
+                gattServicesTask.Wait();
+
+                Thread.Sleep(_delayCmd);
+
+                if (!gattServicesTask.IsCompletedSuccessfully || gattServicesTask.Result.Status != GattCommunicationStatus.Success) exitProcess($"[{lh.Name}] Failed to get services");
+
+                LogLine($"[{lh.Name}] Got services: {gattServicesTask.Result.Services.Count}");
+
+                foreach (var _serv in gattServicesTask.Result.Services.ToArray())
                 {
-                    // V1 BASE STATION
-
-                    _dataFormat = DataFormat.Hex;
-
-                    _selectedService = null;
-                    _services.Clear();
-
-                    _selectedDevice = await BluetoothLEDevice.FromBluetoothAddressAsync(lh.Address).AsTask().TimeoutAfter(_timeout);
-
-                    Thread.Sleep(_delayCmd);
-
-                    LogLine($"[{lh.Name}] Connecting to lighthouse");
-
-                    var result = await _selectedDevice.GetGattServicesAsync(BluetoothCacheMode.Uncached);
-
-                    if (result.Status != GattCommunicationStatus.Success) exitProcess($"[{lh.Name}] Failed to get services");
-
-                    LogLine($"[{lh.Name}] Found {result.Services.Count} services:");
-
-                    for (int i = 0; i < result.Services.Count; i++)
-                    {
-                        var serviceToDisplay = new BluetoothLEAttributeDisplay(result.Services[i]);
-                        _services.Add(serviceToDisplay);
-                        LogLine($"[{lh.Name}] #{i:00}: {_services[i].Name}");
-                        serviceToDisplay = null;
-                    }
-
-                    Thread.Sleep(_delayCmd);
-
-                    string foundName = Utilities.GetIdByNameOrNumber(_services, v1_powerService);
-
-                    if (foundName.ToString().Length < 1) exitProcess($"[{lh.Name}] Failed to retrieve power service characteristic");
-
-                    LogLine($"[{lh.Name}] SERVICE NAME WRITE POWER SERVICE CHAR: {foundName}");
-
-                    IReadOnlyList<GattCharacteristic> characteristics = new List<GattCharacteristic>();
-
-                    var attr = _services.FirstOrDefault(s => s.Name.Equals(foundName));
-
-                    var accessStatus = await attr.service.RequestAccessAsync();
-
-                    if (accessStatus != DeviceAccessStatus.Allowed) exitProcess($"[{lh.Name}] Failed to access power service");
-
-                    Thread.Sleep(_delayCmd);
-
-                    var chresult = await attr.service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached);
-                    if (chresult.Status != GattCommunicationStatus.Success) exitProcess($"[{lh.Name}] Failed to set power characteristic");
-
-                    Thread.Sleep(_delayCmd);
-
-                    characteristics = chresult.Characteristics;
-                    _selectedService = attr;
-                    _characteristics.Clear();
-
-                    LogLine($"[{lh.Name}] Selected service {attr.Name}");
-
-                    if (characteristics.Count <= 0) exitProcess($"[{lh.Name}] Service does not have any characteristic");
-
-                    LogLine($"[{lh.Name}] Characteristics:");
-
-                    for (int i = 0; i < characteristics.Count; i++)
-                    {
-                        var charToDisplay = new BluetoothLEAttributeDisplay(characteristics[i]);
-                        _characteristics.Add(charToDisplay);
-                        LogLine($"[{lh.Name}] #{i:00}: {charToDisplay.Name}\t{charToDisplay.Chars}");
-                    }
-
-                    List<BluetoothLEAttributeDisplay> chars = new List<BluetoothLEAttributeDisplay>();
-
-                    string data = v1_OFF;
-                    if (command == "WAKEUP") data = v1_ON;
-                    var buffer = Utilities.FormatData(data, _dataFormat);
-
-                    LogLine($"[{lh.Name}] DATA BUFFER STRING: {data}");
-
-                    if (_selectedService == null) exitProcess($"[{lh.Name}] No service is selected");
-
-                    chars = new List<BluetoothLEAttributeDisplay>(_characteristics);
-
-                    if (chars.Count < 1) exitProcess($"[{lh.Name}] Failed to retrieve characteristic");
-
-                    string serviceName = Utilities.GetIdByNameOrNumber(chars, v1_powerCharacteristic);
-                    LogLine($"[{lh.Name}] SERVICE NAME WRITE POWER CHAR: {serviceName}");
-
-                    var wrattr = chars.FirstOrDefault(c => c.Name.Equals(serviceName));
-                    if (wrattr == null || wrattr.characteristic == null) exitProcess($"[{lh.Name}] Invalid characteristic {serviceName}");
-
-                    Thread.Sleep(_delayCmd);
-
-                    GattWriteResult wrresult = await wrattr.characteristic.WriteValueWithResultAsync(buffer);
-
-                    if (wrresult.Status != GattCommunicationStatus.Success) exitProcess($"[{lh.Name}] Failed to write {command} characteristic");
-
-                    LogLine($"[{lh.Name}] SUCCESS to write {command} characteristic");
-
-                    lh.LastCmd = (command == "WAKEUP") ? LastCmd.WAKEUP : LastCmd.SLEEP;
-                    lh.PoweredOn = (command == "WAKEUP") ? true : false;
-
-                    _services?.ForEach((s) => { s.service?.Dispose(); });
-                    _services?.Clear();
-                    _characteristics?.Clear();
-                    _selectedDevice?.Dispose();
-                    
-                    result = null;
-                    attr = null;
-                    chresult = null;
-                    buffer = null;
-                    chars = null;
-                    wrattr = null;
-
-                    Thread.Sleep(_delayCmd);
-
+                    LogLine($"[{lh.Name}] Service Attr: {_serv.AttributeHandle} Uuid: {_serv.Uuid}");
                 }
+
+                using var service = gattServicesTask.Result.Services.SingleOrDefault(s => s.Uuid == _powerServGuid);
+
+                Thread.Sleep(_delayCmd);
+
+                if (service == null) exitProcess($"[{lh.Name}] Could not find power service");
+
+                LogLine($"[{lh.Name}] Found power service");
+
+                var powerCharacteristicsTask = service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached).AsTask();
+                powerCharacteristicsTask.Wait();
+
+                Thread.Sleep(_delayCmd);
+
+                if (!powerCharacteristicsTask.IsCompletedSuccessfully || powerCharacteristicsTask.Result.Status != GattCommunicationStatus.Success)
+                    exitProcess($"[{lh.Name}] Could not get power service characteristics");
+
+                var powerChar = powerCharacteristicsTask.Result.Characteristics.SingleOrDefault(c => c.Uuid == _powerCharGuid);
+
+                Thread.Sleep(_delayCmd);
+
+                if (powerChar == null) exitProcess($"[{lh.Name}] Could not get power characteristic");
+
+                Thread.Sleep(_delayCmd);
+
+                LogLine($"[{lh.Name}] Found power characteristic");
+
+                    
+                string data = v1_OFF;
+                if (command == "WAKEUP") data = v1_ON;
+                    
+                if (lh.V2)
+                {
+                    data = v2_OFF;
+                    if (command == "WAKEUP") data = v2_ON;
+                }
+
+                string[] values = data.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                byte[] bytes = new byte[values.Length];
+
+                for (int i = 0; i < values.Length; i++)
+                    bytes[i] = Convert.ToByte(values[i], (_dataFormat == DataFormat.Dec ? 10 : (_dataFormat == DataFormat.Hex ? 16 : 2)));
+
+                var writer = new DataWriter();
+                writer.ByteOrder = ByteOrder.LittleEndian;
+                writer.WriteBytes(bytes);
+
+                var buff = writer.DetachBuffer();
+
+                LogLine($"[{lh.Name}] Sending {command} command to {lh.Name}");
+                var writeResultTask = powerChar.WriteValueAsync(buff).AsTask();
+                writeResultTask.Wait();
+
+                Thread.Sleep(_delayCmd);
+
+                if (!writeResultTask.IsCompletedSuccessfully || writeResultTask.Result != GattCommunicationStatus.Success) exitProcess($"[{lh.Name}] Failed to write {command} command");
+
+                lh.LastCmd = (command == "WAKEUP") ? LastCmd.WAKEUP : LastCmd.SLEEP;
+                lh.PoweredOn = (command == "WAKEUP") ? true : false;
+
+                btDevice.Dispose();
+
+                LogLine($"[{lh.Name}] SUCCESS command {command}");
+
+                Thread.Sleep(_delayCmd);
 
                 LastCmdSent = lh.LastCmd;
                 LastCmdStamp = DateTime.Now;
