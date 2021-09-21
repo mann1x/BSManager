@@ -66,6 +66,8 @@ You can compile with Visual Studio 2019 and .NET 5.
 
 ## Changelog:
 
+- v2.2.1
+    - New: Unified BLE workflow for BS v1 and v2, no functional changes
 - v2.1.0
     - New: Background thread that will start and stop the BLE Advertisement watcher on demand
     - New: Reduced CPU usage from 0.01-0.02% to almost 0% in idle
