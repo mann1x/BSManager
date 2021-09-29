@@ -41,6 +41,7 @@ namespace BSManager
             this.hMDToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.ToolStripMenuItemHmd = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripRunAtStartup = new System.Windows.Forms.ToolStripMenuItem();
+            this.RuntimeToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem4 = new System.Windows.Forms.ToolStripMenuItem();
             this.bSManagerVersionToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripDebugLog = new System.Windows.Forms.ToolStripMenuItem();
@@ -68,17 +69,18 @@ namespace BSManager
             this.toolStripMenuItemBS,
             this.hMDToolStripMenuItem,
             this.toolStripRunAtStartup,
+            this.RuntimeToolStripMenuItem,
             this.toolStripMenuItem4,
             this.quitToolStripMenuItem});
             this.contextMenuStrip1.Name = "contextMenuStrip1";
-            this.contextMenuStrip1.Size = new System.Drawing.Size(150, 114);
+            this.contextMenuStrip1.Size = new System.Drawing.Size(181, 158);
             // 
             // toolStripMenuItemBS
             // 
             this.toolStripMenuItemBS.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.ToolStripMenuItemDisco});
             this.toolStripMenuItemBS.Name = "toolStripMenuItemBS";
-            this.toolStripMenuItemBS.Size = new System.Drawing.Size(149, 22);
+            this.toolStripMenuItemBS.Size = new System.Drawing.Size(180, 22);
             this.toolStripMenuItemBS.Text = "Base Stations";
             // 
             // ToolStripMenuItemDisco
@@ -92,7 +94,7 @@ namespace BSManager
             this.hMDToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.ToolStripMenuItemHmd});
             this.hMDToolStripMenuItem.Name = "hMDToolStripMenuItem";
-            this.hMDToolStripMenuItem.Size = new System.Drawing.Size(149, 22);
+            this.hMDToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
             this.hMDToolStripMenuItem.Text = "HMD";
             // 
             // ToolStripMenuItemHmd
@@ -104,9 +106,16 @@ namespace BSManager
             // toolStripRunAtStartup
             // 
             this.toolStripRunAtStartup.Name = "toolStripRunAtStartup";
-            this.toolStripRunAtStartup.Size = new System.Drawing.Size(149, 22);
+            this.toolStripRunAtStartup.Size = new System.Drawing.Size(180, 22);
             this.toolStripRunAtStartup.Text = "Run at Startup";
             this.toolStripRunAtStartup.Click += new System.EventHandler(this.toolStripRunAtStartup_Click);
+            // 
+            // RuntimeToolStripMenuItem
+            // 
+            this.RuntimeToolStripMenuItem.Name = "RuntimeToolStripMenuItem";
+            this.RuntimeToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.RuntimeToolStripMenuItem.Text = "Manage Runtime";
+            this.RuntimeToolStripMenuItem.Click += new System.EventHandler(this.RuntimeToolStripMenuItem_Click);
             // 
             // toolStripMenuItem4
             // 
@@ -118,7 +127,7 @@ namespace BSManager
             this.licenseToolStripMenuItem,
             this.createDesktopShortcutToolStripMenuItem});
             this.toolStripMenuItem4.Name = "toolStripMenuItem4";
-            this.toolStripMenuItem4.Size = new System.Drawing.Size(149, 22);
+            this.toolStripMenuItem4.Size = new System.Drawing.Size(180, 22);
             this.toolStripMenuItem4.Text = "Help and Info";
             // 
             // bSManagerVersionToolStripMenuItem
@@ -172,7 +181,7 @@ namespace BSManager
             // quitToolStripMenuItem
             // 
             this.quitToolStripMenuItem.Name = "quitToolStripMenuItem";
-            this.quitToolStripMenuItem.Size = new System.Drawing.Size(149, 22);
+            this.quitToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
             this.quitToolStripMenuItem.Text = "Quit";
             this.quitToolStripMenuItem.Click += new System.EventHandler(this.quitToolStripMenuItem_Click);
             // 
@@ -200,7 +209,6 @@ namespace BSManager
         private ToolStripMenuItem toolStripMenuItemBS;
         private ToolStripMenuItem ToolStripMenuItemDisco;
         private ToolStripMenuItem hMDToolStripMenuItem;
-        private ToolStripMenuItem quitToolStripMenuItem;
         private ToolStripMenuItem ToolStripMenuItemHmd;
         private ToolStripMenuItem toolStripRunAtStartup;
         private ToolStripMenuItem toolStripMenuItem4;
@@ -211,6 +219,8 @@ namespace BSManager
         private ToolStripMenuItem licenseToolStripMenuItem;
         private ToolStripMenuItem createDesktopShortcutToolStripMenuItem;
         private ToolStripMenuItem toolStripDebugLog;
+        private ToolStripMenuItem quitToolStripMenuItem;
+        private ToolStripMenuItem RuntimeToolStripMenuItem;
     }
 }
 

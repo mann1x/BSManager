@@ -57,6 +57,7 @@
     <PackageReference Include="Autoupdater.NET.Official" Version="1.7.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="System.Management" Version="5.0.0" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="5.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -92,7 +93,7 @@
 
   <PropertyGroup>
     <PublishReadyToRun>true</PublishReadyToRun>
-    <Version>2.2.1</Version>
+    <Version>2.3.0</Version>
     <Copyright>ManniX</Copyright>
     <Description>VR Base Stations Manager for Pimax and Vive Pro HeadSets</Description>
     <PackageProjectUrl>https://github.com/mann1x/BSManager</PackageProjectUrl>

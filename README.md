@@ -48,6 +48,18 @@ Only for the BS v2 if the last issued command is Sleep and the Base Stations are
 
 Only for the BS v1 the Stations will be briefly powered on, about 30 seconds, to set the Sleep mode (they don't report the power state).
 
+BSManager can automatically start & kill Pimax Runtime & close selecetd SteamVR components (which reduces risk of SteamVR crashes).
+
+Manage Runtime is an option that can be enabled in the System Tray Icon Dropdown Menu; it can be enabled if the Pimax Runtime is not in the default directory running only once BSManager with Admin privileges.
+
+With Manage Runtime enabled Pitool is automatically open and closed. The process will start about 15 seconds after the HMD has changed state to allow reboots (HMD reboot, Pimax service restart or manual on/off) without disruptions.
+
+There's also support for cutomizable lists of processes to close when the Headset is powered off. There's a graceful and an immediate killing list. It's better if possible to use the graceful list. Unfortunately this will not work for processes that doesn't directly close like Pitool which are asking for user input to quit the application.
+
+The default list for processes to be killed gracefully is: "vrmonitor", "vrdashboard", "ReviveOverlay", "vrmonitor" (twice in the list to repeat attempts to close). To customize the graceful list use a "BSManager.grace.txt" file in the same directory of BSManager.exe, one process per line (will replace the default).
+
+The immediate killing list (SIGTERM) is empty by default and can be customized using a "BSManager.kill.txt" file in the same directory of BSManager.exe, one process per line
+
 **Please use the Issues tab on GitHub if you find issues or have a request**
 
 
@@ -66,6 +78,15 @@ You can compile with Visual Studio 2019 and .NET 5.
 
 ## Changelog:
 
+- v2.3.0
+    - New: Option to automatically start & kill Pimax Runtime & close SteamVR components (reduces risk of SteamVR crashes)
+    - New: Manage Runtime is an option that can be enabled in the System Tray Icon Dropdown Menu
+    - New: Manage Runtime can be enabled if the Pimax Runtime is not in the default directory running only once BSManager with Admin privileges
+    - New: Delayed Base Stations control; rebooting HMD or PiService will not trigger a Base Stations power off/on cycle
+    - New: Customizable list for processes to be killed gracefully, default: "vrmonitor", "vrdashboard", "ReviveOverlay", "vrmonitor" (twice in the list to repeat) 
+    - New: Graceful list can be customized using a "BSManager.grace.txt" file in the same directory of BSManager.exe, one process per line (will replace the default)
+    - New: Immediate killing list (SIGTERM) can be customized using a "BSManager.kill.txt" file in the same directory of BSManager.exe, one process per line
+    - Fix: Improved log giles readbility
 - v2.2.1
     - New: Unified BLE workflow for BS v1 and v2, no functional changes
 - v2.1.0
