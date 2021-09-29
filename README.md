@@ -86,7 +86,7 @@ You can compile with Visual Studio 2019 and .NET 5.
     - New: Customizable list for processes to be killed gracefully, default: "vrmonitor", "vrdashboard", "ReviveOverlay", "vrmonitor" (twice in the list to repeat) 
     - New: Graceful list can be customized using a "BSManager.grace.txt" file in the same directory of BSManager.exe, one process per line (will replace the default)
     - New: Immediate killing list (SIGTERM) can be customized using a "BSManager.kill.txt" file in the same directory of BSManager.exe, one process per line
-    - Fix: Improved log giles readbility
+    - Fix: Improved log files readability
 - v2.2.1
     - New: Unified BLE workflow for BS v1 and v2, no functional changes
 - v2.1.0
