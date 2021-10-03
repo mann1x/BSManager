@@ -33,7 +33,6 @@ namespace BSManager
         private void InitializeComponent()
         {
             this.components = new System.ComponentModel.Container();
-            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             this.notifyIcon1 = new System.Windows.Forms.NotifyIcon(this.components);
             this.contextMenuStrip1 = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.toolStripMenuItemBS = new System.Windows.Forms.ToolStripMenuItem();
@@ -45,12 +44,15 @@ namespace BSManager
             this.toolStripMenuItem4 = new System.Windows.Forms.ToolStripMenuItem();
             this.bSManagerVersionToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripDebugLog = new System.Windows.Forms.ToolStripMenuItem();
-            this.steamVRLHDBToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.SteamDBToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.SteamVR_LH_ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.SteamVR_DB_ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.Pimax_LH_ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.Pimax_DB_ToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.documentationToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.licenseToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.createDesktopShortcutToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.quitToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.disableProgressToastToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.contextMenuStrip1.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -59,7 +61,7 @@ namespace BSManager
             this.notifyIcon1.BalloonTipText = "BSManager";
             this.notifyIcon1.BalloonTipTitle = "BSManager";
             this.notifyIcon1.ContextMenuStrip = this.contextMenuStrip1;
-            this.notifyIcon1.Icon = ((System.Drawing.Icon)(resources.GetObject("notifyIcon1.Icon")));
+            this.notifyIcon1.Icon = global::BSManager.BSManagerRes.bsmanager_off;
             this.notifyIcon1.Text = "BSManager";
             this.notifyIcon1.Visible = true;
             // 
@@ -121,8 +123,10 @@ namespace BSManager
             // 
             this.toolStripMenuItem4.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.bSManagerVersionToolStripMenuItem,
+            this.disableProgressToastToolStripMenuItem,
             this.toolStripDebugLog,
-            this.steamVRLHDBToolStripMenuItem,
+            this.SteamVR_LH_ToolStripMenuItem,
+            this.Pimax_LH_ToolStripMenuItem,
             this.documentationToolStripMenuItem,
             this.licenseToolStripMenuItem,
             this.createDesktopShortcutToolStripMenuItem});
@@ -143,19 +147,33 @@ namespace BSManager
             this.toolStripDebugLog.Text = "Debug Log";
             this.toolStripDebugLog.Click += new System.EventHandler(this.toolStripDebugLog_Click);
             // 
-            // steamVRLHDBToolStripMenuItem
+            // SteamVR_LH_ToolStripMenuItem
             // 
-            this.steamVRLHDBToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.SteamDBToolStripMenuItem});
-            this.steamVRLHDBToolStripMenuItem.Name = "steamVRLHDBToolStripMenuItem";
-            this.steamVRLHDBToolStripMenuItem.Size = new System.Drawing.Size(200, 22);
-            this.steamVRLHDBToolStripMenuItem.Text = "SteamVR LH DB";
+            this.SteamVR_LH_ToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.SteamVR_DB_ToolStripMenuItem});
+            this.SteamVR_LH_ToolStripMenuItem.Name = "SteamVR_LH_ToolStripMenuItem";
+            this.SteamVR_LH_ToolStripMenuItem.Size = new System.Drawing.Size(200, 22);
+            this.SteamVR_LH_ToolStripMenuItem.Text = "SteamVR LH DB";
             // 
-            // SteamDBToolStripMenuItem
+            // SteamVR_DB_ToolStripMenuItem
             // 
-            this.SteamDBToolStripMenuItem.Name = "SteamDBToolStripMenuItem";
-            this.SteamDBToolStripMenuItem.Size = new System.Drawing.Size(96, 22);
-            this.SteamDBToolStripMenuItem.Text = "N/D";
+            this.SteamVR_DB_ToolStripMenuItem.Name = "SteamVR_DB_ToolStripMenuItem";
+            this.SteamVR_DB_ToolStripMenuItem.Size = new System.Drawing.Size(96, 22);
+            this.SteamVR_DB_ToolStripMenuItem.Text = "N/D";
+            // 
+            // Pimax_LH_ToolStripMenuItem
+            // 
+            this.Pimax_LH_ToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.Pimax_DB_ToolStripMenuItem});
+            this.Pimax_LH_ToolStripMenuItem.Name = "Pimax_LH_ToolStripMenuItem";
+            this.Pimax_LH_ToolStripMenuItem.Size = new System.Drawing.Size(200, 22);
+            this.Pimax_LH_ToolStripMenuItem.Text = "Pimax LH DB";
+            // 
+            // Pimax_DB_ToolStripMenuItem
+            // 
+            this.Pimax_DB_ToolStripMenuItem.Name = "Pimax_DB_ToolStripMenuItem";
+            this.Pimax_DB_ToolStripMenuItem.Size = new System.Drawing.Size(96, 22);
+            this.Pimax_DB_ToolStripMenuItem.Text = "N/D";
             // 
             // documentationToolStripMenuItem
             // 
@@ -185,12 +203,19 @@ namespace BSManager
             this.quitToolStripMenuItem.Text = "Quit";
             this.quitToolStripMenuItem.Click += new System.EventHandler(this.quitToolStripMenuItem_Click);
             // 
+            // disableProgressToastToolStripMenuItem
+            // 
+            this.disableProgressToastToolStripMenuItem.Name = "disableProgressToastToolStripMenuItem";
+            this.disableProgressToastToolStripMenuItem.Size = new System.Drawing.Size(200, 22);
+            this.disableProgressToastToolStripMenuItem.Text = "Disable Progress Toast";
+            this.disableProgressToastToolStripMenuItem.Click += new System.EventHandler(this.disableProgressToastToolStripMenuItem_Click);
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(800, 450);
-            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            this.Icon = global::BSManager.BSManagerRes.bsmanager_off;
             this.Name = "Form1";
             this.Text = "BSManager";
             this.WindowState = System.Windows.Forms.FormWindowState.Minimized;
@@ -213,14 +238,17 @@ namespace BSManager
         private ToolStripMenuItem toolStripRunAtStartup;
         private ToolStripMenuItem toolStripMenuItem4;
         private ToolStripMenuItem bSManagerVersionToolStripMenuItem;
-        private ToolStripMenuItem steamVRLHDBToolStripMenuItem;
-        private ToolStripMenuItem SteamDBToolStripMenuItem;
+        private ToolStripMenuItem Pimax_LH_ToolStripMenuItem;
+        private ToolStripMenuItem Pimax_DB_ToolStripMenuItem;
         private ToolStripMenuItem documentationToolStripMenuItem;
         private ToolStripMenuItem licenseToolStripMenuItem;
         private ToolStripMenuItem createDesktopShortcutToolStripMenuItem;
         private ToolStripMenuItem toolStripDebugLog;
         private ToolStripMenuItem quitToolStripMenuItem;
         private ToolStripMenuItem RuntimeToolStripMenuItem;
+        private ToolStripMenuItem SteamVR_LH_ToolStripMenuItem;
+        private ToolStripMenuItem SteamVR_DB_ToolStripMenuItem;
+        private ToolStripMenuItem disableProgressToastToolStripMenuItem;
     }
 }
 

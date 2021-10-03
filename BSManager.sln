@@ -8,16 +8,25 @@ EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
 		Release Profiler|Any CPU = Release Profiler|Any CPU
+		Release Profiler|x64 = Release Profiler|x64
 		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{147B18D2-8162-45EA-9A9C-1078723706F4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{147B18D2-8162-45EA-9A9C-1078723706F4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{147B18D2-8162-45EA-9A9C-1078723706F4}.Debug|x64.ActiveCfg = Debug|x64
+		{147B18D2-8162-45EA-9A9C-1078723706F4}.Debug|x64.Build.0 = Debug|x64
 		{147B18D2-8162-45EA-9A9C-1078723706F4}.Release Profiler|Any CPU.ActiveCfg = Release Profiler|Any CPU
 		{147B18D2-8162-45EA-9A9C-1078723706F4}.Release Profiler|Any CPU.Build.0 = Release Profiler|Any CPU
+		{147B18D2-8162-45EA-9A9C-1078723706F4}.Release Profiler|x64.ActiveCfg = Release Profiler|x64
+		{147B18D2-8162-45EA-9A9C-1078723706F4}.Release Profiler|x64.Build.0 = Release Profiler|x64
 		{147B18D2-8162-45EA-9A9C-1078723706F4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{147B18D2-8162-45EA-9A9C-1078723706F4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{147B18D2-8162-45EA-9A9C-1078723706F4}.Release|x64.ActiveCfg = Release|x64
+		{147B18D2-8162-45EA-9A9C-1078723706F4}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,13 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Management;
 using System.Diagnostics;
-using Windows.Devices.Enumeration;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using Windows.Devices.Bluetooth.Advertisement;
@@ -23,19 +21,32 @@ using AutoUpdaterDotNET;
 using System.Runtime.Serialization;
 using System.Timers;
 using System.ServiceProcess;
-using Timer = System.Threading.Timer;
 using File = System.IO.File;
+using System.Text;
+using Microsoft.Toolkit.Uwp.Notifications;
+using System.IO.Packaging;
+using NUnit.Framework;
+using System.Globalization;
 
 namespace BSManager
 {
+    public enum MsgSeverity
+    {
+        INFO,
+        WARNING,
+        ERROR
+    }
+
     public partial class Form1 : Form
 
     {
-        readonly ComponentResourceManager resources = new(typeof(Form1));
+        readonly ComponentResourceManager resources = new ComponentResourceManager(typeof(Form1));
 
         static int bsCount = 0;
 
         static List<string> bsSerials = new List<string>();
+        static List<string> sbsSerials = new List<string>();
+        static List<string> pbsSerials = new List<string>();
 
         static IEnumerable<JToken> bsTokens;
 
@@ -47,8 +58,10 @@ namespace BSManager
         static TimeSpan _timeout = TimeSpan.FromSeconds(5);
 
         static string steamvr_lhjson;
+        static string pimax_lhjson;
 
-        static bool lhfound = false;
+        static bool slhfound = false;
+        static bool plhfound = false;
 
         private HashSet<Lighthouse> _lighthouses = new HashSet<Lighthouse>();
         private BluetoothLEAdvertisementWatcher watcher;
@@ -71,6 +84,7 @@ namespace BSManager
 
         private int _V2DoubleCheckMin = 5;
         private bool V2BaseStations = false;
+        private bool V2BaseStationsVive = false;
 
         public bool HeadSetState = false;
 
@@ -87,8 +101,8 @@ namespace BSManager
 
         System.Timers.Timer ProcessLHtimer = new System.Timers.Timer();
 
-        private TextWriterTraceListener traceEx = new TextWriterTraceListener("BSManager_exceptions.log", "BSManagerEx");
-        private TextWriterTraceListener traceDbg = new TextWriterTraceListener("BSManager.log", "BSManagerDbg");
+        private static TextWriterTraceListener traceEx = new TextWriterTraceListener("BSManager_exceptions.log", "BSManagerEx");
+        private static TextWriterTraceListener traceDbg = new TextWriterTraceListener("BSManager.log", "BSManagerDbg");
 
         private readonly string fnKillList = "BSManager.kill.txt";
         private readonly string fnGraceList = "BSManager.grace.txt";
@@ -97,10 +111,32 @@ namespace BSManager
         private string[] graceful_list = new string[] { "vrmonitor", "vrdashboard", "ReviveOverlay", "vrmonitor" };
         private string[] cleanup_pilist = new string[] { "pi_server", "piservice", "pitool" };
 
-        private bool debugLog = false;
-        private bool ManageRuntime = false;
-        private string RuntimePath = "";
-        private bool LastManage = false;
+        private static bool debugLog = false;
+        private static bool ManageRuntime = false;
+        private static string RuntimePath = "";
+        private static bool LastManage = false;
+        private static bool ShowProgressToast = true;
+        private static bool SetProgressToast = true;
+
+        protected List<Windows.UI.Notifications.ToastNotification> ptoastNotificationList = new List<Windows.UI.Notifications.ToastNotification>();
+
+        [System.Runtime.InteropServices.DllImportAttribute("user32.dll")]
+        public static extern bool PostMessage(IntPtr handleWnd, UInt32 Msg, Int32 wParam, UInt32 lParam);
+
+        const int WM_QUERYENDSESSION = 0x0011,
+                  WM_ENDSESSION = 0x0016,
+                  WM_TRUE = 0x1,
+                  WM_FALSE = 0x0;
+
+
+        [System.Runtime.InteropServices.DllImportAttribute("user32.dll", EntryPoint = "FindWindowEx")]
+        public static extern int FindWindowEx(int hwndParent, int hwndEnfant, int lpClasse, string lpTitre);
+
+        [System.Runtime.InteropServices.DllImportAttribute("user32.dll")]
+        static extern int GetWindowThreadProcessId(IntPtr hWnd, out int processId);
+
+        [System.Runtime.InteropServices.DllImportAttribute("user32.dll")]
+        public static extern IntPtr FindWindowEx(IntPtr parentWindow, IntPtr previousChildWindow, string windowClass, string windowTitle);
 
         public Form1()
         {
@@ -126,6 +162,8 @@ namespace BSManager
                 LogLine($"[BSMANAGER] STARTED ");
                 LogLine($"[BSMANAGER] Version: {_versionInfo}");
 
+                FindRuntime();
+
                 using (RegistryKey registrySettingsCheck = Registry.CurrentUser.OpenSubKey("SOFTWARE\\ManniX\\BSManager", true))
                 {
 
@@ -143,23 +181,41 @@ namespace BSManager
                     {
                         toolStripDebugLog.Checked = false;
                         debugLog = false;
+                        LogLine($"[BSMANAGER] Debug Log disabled");
                     }
                     else
                     {
                         toolStripDebugLog.Checked = true;
                         debugLog = true;
+                        LogLine($"[BSMANAGER] Debug Log enabled");
                     }
 
                     if (registrySettings.GetValue("ManageRuntime") == null)
                     {
                         RuntimeToolStripMenuItem.Checked = false;
                         ManageRuntime = false;
+                        LogLine($"[BSMANAGER] Manage Runtime disabled");
                     }
-                    else if (registrySettings.GetValue("ManageRuntimePath") != null)
+                    else
                     {
-                        RuntimePath = registrySettings.GetValue("ManageRuntimePath").ToString();
                         RuntimeToolStripMenuItem.Checked = true;
                         ManageRuntime = true;
+                        LogLine($"[BSMANAGER] Manage Runtime enabled");
+                    }
+
+                    if (registrySettings.GetValue("ShowProgressToast") == null)
+                    {
+                        disableProgressToastToolStripMenuItem.Checked = true;
+                        SetProgressToast = false;
+                        ShowProgressToast = false;
+                        LogLine($"[BSMANAGER] Progress Toast disabled");
+                    }
+                    else
+                    {
+                        disableProgressToastToolStripMenuItem.Checked = false;
+                        SetProgressToast = true;
+                        ShowProgressToast = true;
+                        LogLine($"[BSMANAGER] Progress Toast enabled");
                     }
                 }
 
@@ -175,12 +231,14 @@ namespace BSManager
 
                 using (RegistryKey registryStart = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
                 {
-                    if (registryStart.GetValue("BSManager") == null)
+                    string _curpath = registryStart.GetValue("BSManager").ToString();
+                    if (_curpath == null)
                     {
                         toolStripRunAtStartup.Checked = false;
                     }
                     else
                     {
+                        if (_curpath != MyExecutablePath) registryStart.SetValue("BSManager", MyExecutablePath);
                         toolStripRunAtStartup.Checked = true;
                     }
                 }
@@ -196,6 +254,44 @@ namespace BSManager
 
                 _glist = null; _klist = null;
 
+                slhfound = Read_SteamVR_config();
+                if (!slhfound)
+                {
+                    SteamVR_DB_ToolStripMenuItem.Text = "SteamVR DB not found in registry";
+                }
+                else
+                {
+                    slhfound = Load_LH_DB("SteamVR" );
+                    if (!slhfound) { SteamVR_DB_ToolStripMenuItem.Text = "SteamVR DB file parse error"; }
+                    else
+                    {
+                        SteamVR_DB_ToolStripMenuItem.Text = "Serials:";
+                        foreach (string bs in sbsSerials)
+                        {
+                            SteamVR_LH_ToolStripMenuItem.DropDownItems.Add(bs);
+                        }
+                    }
+                }
+
+                plhfound = Read_Pimax_config();
+                if (!plhfound)
+                {
+                    Pimax_DB_ToolStripMenuItem.Text = "Pimax DB not found";
+                }
+                else
+                {
+                    plhfound = Load_LH_DB("Pimax");
+                    if (!plhfound) { Pimax_DB_ToolStripMenuItem.Text = "Pimax DB file parse error"; }
+                    else
+                    {
+                        Pimax_DB_ToolStripMenuItem.Text = "Serials:";
+                        foreach (string bs in pbsSerials)
+                        {
+                            Pimax_LH_ToolStripMenuItem.DropDownItems.Add(bs);
+                        }
+                    }
+                }
+
                 WqlEventQuery insertQuery = new WqlEventQuery("SELECT * FROM __InstanceCreationEvent WITHIN 2 WHERE TargetInstance ISA 'Win32_USBHub'");
 
                 insertWatcher = new ManagementEventWatcher(insertQuery);
@@ -207,14 +303,12 @@ namespace BSManager
                 removeWatcher.EventArrived += new EventArrivedEventHandler(DeviceRemovedEvent);
                 removeWatcher.Start();
 
-
                 watcher = new BluetoothLEAdvertisementWatcher();
                 watcher.Received += AdvertisementWatcher_Received;
 
                 thrUSBDiscovery = new Thread(RunUSBDiscovery);
                 thrUSBDiscovery.Start();
 
-                //Thread.Sleep(500);
                 thrProcessLH = new Thread(RunProcessLH);
 
                 while (true)
@@ -227,24 +321,20 @@ namespace BSManager
                     }
                 }
 
-                lhfound = Read_SteamVR_config();
-                if (!lhfound)
+                const string scheme = "pack";
+                if (!UriParser.IsKnownScheme(scheme))
                 {
-                    SteamDBToolStripMenuItem.Text = "SteamVR DB not found in registry";
+                    Assert.That(PackUriHelper.UriSchemePack, Is.EqualTo(scheme));
                 }
-                else
+
+                // Listen to notification activation
+                ToastNotificationManagerCompat.OnActivated += toastArgs =>
                 {
-                    lhfound = Load_LH_DB();
-                    if (!lhfound) { SteamDBToolStripMenuItem.Text = "SteamVR DB file parse error"; }
-                    else
-                    {
-                        SteamDBToolStripMenuItem.Text = "Serials:";
-                        foreach (string bs in bsSerials)
-                        {
-                            steamVRLHDBToolStripMenuItem.DropDownItems.Add(bs);
-                        }
-                    }
-                }
+                    // Obtain the arguments from the notification
+                    ToastArguments args = ToastArguments.Parse(toastArgs.Argument);
+                    // Clear the Toast Progress List
+                    if (args["conversationId"] == "9113") ptoastNotificationList.Clear();
+                };
 
             }
             catch (Exception ex)
@@ -257,18 +347,27 @@ namespace BSManager
         private void HandleEx(Exception ex)
         {
             try {
-                notifyIcon1.ShowBalloonTip(1000, null, ex.ToString(), ToolTipIcon.Error);
+                string _msg = ex.Message;
+                if (ex.Source != string.Empty && ex.Source != null) _msg = $"{_msg} Source: {ex.Source}";
+                new ToastContentBuilder()
+                    .AddHeader("6789", "Exception raised", "")
+                    .AddText(_msg)
+                    .AddText(ex.StackTrace)
+                    .Show(toast =>
+                    {
+                        toast.ExpirationTime = DateTime.Now.AddSeconds(360);
+                    });
                 LogLine($"{ex}");
                 traceEx.WriteLine($"[{DateTime.Now}] {ex}");
                 traceEx.Flush();
             }
             catch (Exception e)
             {
-                LogLine($"{e}");
+                LogLine($"[HANDLEEX] Exception: {e}");
             }
 
         }
-        private void LogLine(string msg)
+        public static void LogLine(string msg)
         {
             Trace.WriteLine($"{msg}");
             if (debugLog) {
@@ -276,14 +375,28 @@ namespace BSManager
                 traceDbg.Flush();
             }
         }
-        private void BalloonErr(string msg)
+
+        public void BalloonMsg(string msg, string header = "BSManager")
         {
-            notifyIcon1.ShowBalloonTip(1000, null, msg, ToolTipIcon.Error);
-            Trace.WriteLine($"{msg}");
-            if (debugLog)
+            try
             {
-                traceDbg.WriteLine($"[{DateTime.Now}] {msg}");
-                traceDbg.Flush();
+                new ToastContentBuilder()
+                    .AddText(header)
+                    .AddText(msg)
+                    .Show(toast =>
+                    {
+                        toast.ExpirationTime = DateTime.Now.AddSeconds(120);
+                    });
+                Trace.WriteLine($"{msg}");
+                if (debugLog)
+                {
+                    traceDbg.WriteLine($"[{DateTime.Now}] {msg}");
+                    traceDbg.Flush();
+                }
+            }
+            catch (Exception e)
+            {
+                LogLine($"[BALLOONMSG] Exception: {e}");
             }
         }
 
@@ -292,6 +405,23 @@ namespace BSManager
             Task.Delay(TimeSpan.FromMilliseconds(15000))
                 .ContinueWith(task => doManageRuntime());
         }
+
+        private IntPtr[] GetProcessWindows(int process)
+        {
+            IntPtr[] apRet = (new IntPtr[256]);
+            int iCount = 0;
+            IntPtr pLast = IntPtr.Zero;
+            do
+            {
+                pLast = FindWindowEx(IntPtr.Zero, pLast, null, null);
+                int iProcess_;
+                GetWindowThreadProcessId(pLast, out iProcess_);
+                if (iProcess_ == process) apRet[iCount++] = pLast;
+            } while (pLast != IntPtr.Zero);
+            System.Array.Resize(ref apRet, iCount);
+            return apRet;
+        }
+
 
         private void doManageRuntime()
         {
@@ -376,7 +506,13 @@ namespace BSManager
                                     Thread.Sleep(250);
                                     if (!Proc2Kill.HasExited)
                                     {
-                                        LogLine($"[Manage Runtime] {ProcessName} can't be killed, still running");
+                                        IntPtr[] wnd = GetProcessWindows(Int32.Parse((Proc2Kill.Id).ToString()));
+                                        var wm_ret = PostMessage(wnd[0], WM_ENDSESSION, WM_TRUE, 0x80000000);
+                                        Thread.Sleep(1000);
+                                        if (!Proc2Kill.HasExited)
+                                        {
+                                            LogLine($"[Manage Runtime] {ProcessName} can't be killed, still running");
+                                        }
                                     }
                                     else
                                     {
@@ -405,14 +541,15 @@ namespace BSManager
                 if (ManageRuntime) {
                     if (!HeadSetState && LastManage) {
 
-                        /*
+#if DEBUG
+                        
                         Process[] localAll = Process.GetProcesses();
                         foreach (Process processo in localAll)
                         {
-                            LogLine($"Active: {processo.ProcessName}");
+                            LogLine($"[PROCESSES] Active: {processo.ProcessName} PID={processo.Id}");
                         }
-                        */
-
+                        
+#endif
                         ServiceController sc = new ServiceController("PiServiceLauncher");
                         LogLine($"[Manage Runtime] PiService is currently: {sc.Status}");
 
@@ -479,11 +616,6 @@ namespace BSManager
 
                 collection.Dispose();
 
-                //doManageRuntime("OFF");
-
-                //Thread.Sleep(1000);
-                //Application.Exit();
-
                 return;
             }
             catch (Exception ex)
@@ -504,9 +636,10 @@ namespace BSManager
 
                 if (_hmd.Length > 0)
                 {
+                    if (SetProgressToast) ShowProgressToast = true;
                     LogLine($"[HMD] ## {_hmd} {action} ");
                     ChangeHMDStrip($" {_hmd} {action} ", true);
-                    this.notifyIcon1.Icon = Resource1.bsmanager_on;
+                    this.notifyIcon1.Icon = BSManagerRes.bsmanager_on;
                     HeadSetState = true;
                     Task.Delay(TimeSpan.FromMilliseconds(5000))
                         .ContinueWith(task => checkLHState(lh => !lh.PoweredOn, true));
@@ -547,9 +680,10 @@ namespace BSManager
 
                 if (_hmd.Length > 0)
                 {
+                    if (SetProgressToast) ShowProgressToast = true;
                     LogLine($"[HMD] ## {_hmd} {action} ");
                     ChangeHMDStrip($" {_hmd} {action} ", false);
-                    this.notifyIcon1.Icon = (Icon)(resources.GetObject("notifyIcon1.Icon"));
+                    this.notifyIcon1.Icon = BSManagerRes.bsmanager_off;
                     HeadSetState = false;
                     Task.Delay(TimeSpan.FromMilliseconds(5000))
                         .ContinueWith(task => checkLHState(lh => lh.PoweredOn, false));
@@ -623,6 +757,7 @@ namespace BSManager
             {
                 if (watcher.Status == BluetoothLEAdvertisementWatcherStatus.Stopped || watcher.Status == BluetoothLEAdvertisementWatcherStatus.Created)
                 {
+                    ptoastNotificationList.Clear();
                     LogLine($"[LightHouse] Starting BLE Watcher Status: {watcher.Status}");
                     watcher.Start();
                     Thread.Sleep(250);
@@ -637,6 +772,7 @@ namespace BSManager
                     watcher.Stop();
                     Thread.Sleep(250);
                     LogLine($"[LightHouse] Stopped BLE Watcher Status: {watcher.Status}");
+                    ptoastNotificationList.Clear();
                 }
             }
         }
@@ -647,7 +783,7 @@ namespace BSManager
             {
                 bool _done = true;
 
-                if (V2BaseStations && LastCmdSent == LastCmd.SLEEP && !HeadSetState)
+                if (V2BaseStationsVive  && LastCmdSent == LastCmd.SLEEP && !HeadSetState)
                 {
                     TimeSpan _delta = DateTime.Now - LastCmdStamp;
 
@@ -655,6 +791,7 @@ namespace BSManager
 
                     if (_delta.Minutes >= _V2DoubleCheckMin)
                     {
+                        ShowProgressToast = false;
                         foreach (Lighthouse lh in _lighthouses)
                         {
                             lh.ProcessDone = false;
@@ -786,7 +923,7 @@ namespace BSManager
                     {
                         if (item.Text.StartsWith(_name))
                         {
-                            if (_poweredOn) item.Image = Resource1.bsmanager_on.ToBitmap();
+                            if (_poweredOn) item.Image = BSManagerRes.bsmanager_on.ToBitmap();
                             if (!_poweredOn) item.Image = null;
                             item.Text = $"{_name} {_cmdStatus}{_actionStatus}";
                         }
@@ -817,8 +954,16 @@ namespace BSManager
                         {
 
                             steamvr_lhjson = o.ToString() + "\\config\\lighthouse\\lighthousedb.json";
-                            LogLine($"[CONFIG] STEAMVRPATH={steamvr_lhjson}");
-                            return true;
+                            if (File.Exists(steamvr_lhjson))
+                            {
+                                LogLine($"[CONFIG] Found SteamVR LH DB at Path={steamvr_lhjson}");
+                                return true;
+                            }
+                            else
+                            {
+                                LogLine($"[CONFIG] Not found SteamVR LH DB at Path={steamvr_lhjson}");
+                                return false;
+                            }
                         }
                     }
                     return false;
@@ -831,11 +976,45 @@ namespace BSManager
             }
         }
 
-        private bool Load_LH_DB()
+        private bool Read_Pimax_config()
         {
             try
             {
-                using (StreamReader r = new StreamReader(steamvr_lhjson))
+                pimax_lhjson = string.Empty;
+                string ProgramDataFolder = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+                pimax_lhjson = ProgramDataFolder + "\\pimax\\runtime\\config\\lighthouse\\lighthousedb.json";
+                if (File.Exists(pimax_lhjson))
+                {
+                    LogLine($"[CONFIG] Found Pimax LH DB at Path={pimax_lhjson}");
+                    return true;
+                }
+                else
+                {
+                    LogLine($"[CONFIG] Not found Pimax LH DB at Path={pimax_lhjson}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                HandleEx(ex);
+                return false;
+            }
+        }
+
+        private bool Load_LH_DB(string db_name)
+        {
+            try
+            {
+                string _lhjson = string.Empty;
+                if (db_name == "Pimax")
+                {
+                    _lhjson = pimax_lhjson;
+                }
+                else
+                {
+                    _lhjson = steamvr_lhjson;
+                }
+                using (StreamReader r = new StreamReader(_lhjson))
                 {
                     string json = r.ReadToEnd();
                     LogLine($"[CONFIG] SteamDB JSON Length={json.Length}");
@@ -846,21 +1025,34 @@ namespace BSManager
 
                     int _maxbs = 6;
                     int _curbs = 1;
+                    int _bsCount = 0;
 
                     foreach (JToken bsitem in bsTokens)
                     {
                         if (!bsSerials.Contains(bsitem.ToString())) bsSerials.Add(bsitem.ToString());
-                        LogLine($"[CONFIG] Base Station Serial={bsitem}");
+                        if (db_name == "Pimax")
+                        {
+                            if (!pbsSerials.Contains(bsitem.ToString())) pbsSerials.Add(bsitem.ToString());
+                            _bsCount = pbsSerials.Count;
+                        }
+                        else
+                        {
+                            if (!sbsSerials.Contains(bsitem.ToString())) sbsSerials.Add(bsitem.ToString());
+                            _bsCount = sbsSerials.Count;
+                        }
+
+                        LogLine($"[CONFIG] {db_name} DB Base Station Serial={bsitem}");
                         _curbs++;
                         if (_curbs > _maxbs) break;
                     }
 
-                    LogLine($"[CONFIG] Base Stations List=" + string.Join(", ", bsSerials));
+                    LogLine($"[CONFIG] {db_name} DB Base Stations List=" + string.Join(", ", bsSerials));
 
                     bsCount = bsSerials.Count();
-                    LogLine($"[CONFIG] Base Stations in SteamDB: {bsCount}");
-                    return true;
 
+                    LogLine($"[CONFIG] {db_name} DB Base Stations count: {_bsCount}");
+
+                    return true;
 
                 }
             }
@@ -899,33 +1091,66 @@ namespace BSManager
 
                 if (args.Advertisement.LocalName.StartsWith("LHB-"))
                 {
-                    var valveData = args.Advertisement.GetManufacturerDataByCompanyId(0x055D).Single();
-                    var data = new byte[valveData.Data.Length];
+                    var valveData = args.Advertisement.GetManufacturerDataByCompanyId(0x055D);
+                    var htcData = args.Advertisement.GetManufacturerDataByCompanyId(0x02ED);
 
-                    using (var reader = DataReader.FromBuffer(valveData.Data))
-                    {
-                        reader.ReadBytes(data);
+                    if (valveData.Count > 0) {
+
+                        existing.Manufacturer = BSManufacturer.VIVE;
+
+                        var valveDataSingle = valveData.Single();
+                        var data = new byte[valveDataSingle.Data.Length];
+
+                        using (var reader = DataReader.FromBuffer(valveDataSingle.Data))
+                        {
+                            reader.ReadBytes(data);
+                        }
+
+                        if (!string.IsNullOrEmpty(data[4].ToString()))
+                        {
+                            intpstate = Int32.Parse(data[4].ToString());
+                            existing.V2PoweredOn = intpstate > 0;
+
+                            //existing.PoweredOn = data[4] == 0x03;
+                            //LogLine($"{existing.Name} power status {intpstate} last {existing.lastPowerState} PoweredOn={existing.PoweredOn}");
+                        }
+
+                        V2BaseStationsVive = true;
                     }
-
-                    if (!string.IsNullOrEmpty(data[4].ToString()))
+                    else if (htcData.Count > 0)
                     {
-                        intpstate = Int32.Parse(data[4].ToString());
-                        existing.V2PoweredOn = intpstate > 0;
+                        var htcDataSingle = htcData.Single();
+                        var data = new byte[htcDataSingle.Data.Length];
 
-                        //existing.PoweredOn = data[4] == 0x03;
-                        //LogLine($"{existing.Name} power status {intpstate} last {existing.lastPowerState} PoweredOn={existing.PoweredOn}");
+
+                        using (var reader = DataReader.FromBuffer(htcDataSingle.Data))
+                        {
+                            reader.ReadBytes(data);
+                        }
+
+
+                        if (!string.IsNullOrEmpty(data[4].ToString()))
+                        {
+
+                            intpstate = Int32.Parse(data[4].ToString());
+                            existing.V2PoweredOn = intpstate > 0;
+
+                            //existing.PoweredOn = data[4] == 0x03;
+                            //LogLine($"{existing.Name} power status {intpstate} last {existing.lastPowerState} PoweredOn={existing.PoweredOn}");
+                        }
                     }
 
                     V2BaseStations = true;
                     existing.V2 = true;
 
-                    if (existing.V2PoweredOn && existing.LastCmd == LastCmd.SLEEP && !HeadSetState)
+                    if (existing.V2PoweredOn && existing.LastCmd == LastCmd.SLEEP && !HeadSetState && existing.Manufacturer == BSManufacturer.VIVE)
                     {
                         TimeSpan _delta = DateTime.Now - existing.LastCmdStamp;
                         if (_delta.Minutes >= _V2DoubleCheckMin)
                         {
                             if (0 == Interlocked.Exchange(ref processingCmdSync, 1))
                             {
+                                ShowProgressToast = false;
                                 LogLine($"[LightHouse] Processing SLEEP check {_V2DoubleCheckMin} minutes still ON for: {existing.Name}");
                                 ProcessLighthouseAsync(existing, "SLEEP");
                                 existing.ProcessDone = true;
@@ -984,12 +1209,6 @@ namespace BSManager
 
         }
 
-        private void BalloonMsg(string msg, ToolTipIcon level = ToolTipIcon.Warning)
-        {
-            notifyIcon1.ShowBalloonTip(1000, null, msg, level);
-            Trace.WriteLine(msg);
-        }
-
         private void ProcessLighthouseAsync(Lighthouse lh, string command)
         {
             try
@@ -999,12 +1218,96 @@ namespace BSManager
                     throw new ProcessError($"{msg}");
                 }
 
+                var progressdec = CultureInfo.InvariantCulture.Clone() as CultureInfo;
+                progressdec.NumberFormat.NumberDecimalSeparator = ".";
+                string _toastAction = (command == "WAKEUP") ? "Waking up" : "Set to sleep";
+                uint pidx = 1;
+                string ptag = "LHProcess";
+                string pgroup = "LHProcess";
+                
+                int _leftDone = 0;
+                foreach (Lighthouse lhDone in _lighthouses) {
+                    if (lhDone.ProcessDone) _leftDone++;
+                }
+
+                lh.OpsTotal++;
+
+                int _doneCount=_leftDone+1;
+
+                var pcontent = new ToastContentBuilder()
+                    .AddArgument("action", "viewConversation")
+                    .AddArgument("conversationId", 9113)
+                    .AddText("Commandeering the Base Stations...")
+                    .AddAudio(null,null,true)
+                    .AddVisualChild(new AdaptiveProgressBar()
+                    {
+                        Title = new BindableString("title"),
+                        Value = new BindableProgressBarValue("progressValue"),
+                        ValueStringOverride = new BindableString("pregressCount"),
+                        Status = new BindableString("progressStatus")
+                    }).GetToastContent();
+
+                int eRate = (int)Math.Round((double)(100 * lh.ErrorTotal) / lh.OpsTotal);
+                bool showeRate = (eRate > 10) ? true : false;
+                string bsmanuf = "";
+                if (V2BaseStations)
+                    bsmanuf = (lh.Manufacturer == BSManufacturer.HTC) ? " (by HTC)" : " (by VIVE)";
+
+                var ptoast = new Windows.UI.Notifications.ToastNotification(pcontent.GetXml());
+
+                if (ptoastNotificationList.Count == 0)
+                {
+                    ptoast.Tag = ptag;
+                    ptoast.Group = pgroup;
+                    ptoast.Data = new Windows.UI.Notifications.NotificationData();
+                    ptoast.Data.Values["title"] = $"BS {lh.Name}{bsmanuf}";
+                    ptoast.Data.Values["progressValue"] = "0";
+                    ptoast.Data.Values["pregressCount"] = $"{_doneCount}/{bsCount}";
+                    ptoast.Data.Values["progressStatus"] = $"{_toastAction}... (0%)";
+                    ptoast.Data.SequenceNumber = pidx;
+                    ptoast.ExpirationTime = DateTime.Now.AddSeconds(120);
+
+                    ptoastNotificationList.Add(ptoast);
+                    if (ShowProgressToast) ToastNotificationManagerCompat.CreateToastNotifier().Show(ptoast);
+                } 
+                else
+                {
+                    ptoast = ptoastNotificationList[0];
+                    var initdata = new Windows.UI.Notifications.NotificationData
+                    {
+                        SequenceNumber = pidx++
+                    };
+                    initdata.Values["title"] = $"BS {lh.Name}{bsmanuf}";
+                    initdata.Values["progressValue"] = $"0";
+                    initdata.Values["pregressCount"] = $"{_doneCount}/{bsCount}";
+                    initdata.Values["progressStatus"] = $"{_toastAction}... (0%)";
+                    if (ShowProgressToast) ToastNotificationManagerCompat.CreateToastNotifier().Update(initdata, ptag, pgroup);
+                }
+
+                void updateProgress(double percentage, string _msg = "Commandeering")
+                {
+                    string _ptag = "LHProcess";
+                    string _pgroup = "LHProcess";
+                    var data = new Windows.UI.Notifications.NotificationData
+                    {
+                        SequenceNumber = pidx++
+                    };
+                    double _p = percentage / 100;
+                    string _status = $"{_toastAction}... ({percentage}%)";
+                    if (showeRate) _status += $" [Errors {eRate}%]";
+                    data.Values["title"] = $"BS {lh.Name}{bsmanuf}";
+                    data.Values["progressValue"] = $"{_p.ToString(progressdec)}";
+                    data.Values["pregressCount"] = $"{_doneCount}/{bsCount}";
+                    data.Values["progressStatus"] = _status;
+                    if (ShowProgressToast) ToastNotificationManagerCompat.CreateToastNotifier().Update(data, _ptag, _pgroup);
+                }
+
+
                 LogLine($"[{lh.Name}] START Processing command: {command}");
 
                 lh.Action = (command == "WAKEUP") ? Action.WAKEUP : Action.SLEEP;
 
                 ChangeBSMsg(lh.Name, lh.PoweredOn, lh.LastCmd, lh.Action);
-
 
                 Guid _powerServGuid = v1_powerGuid;
                 Guid _powerCharGuid = v1_powerCharacteristic;
@@ -1018,20 +1321,26 @@ namespace BSManager
                 var potentialLighthouseTask = BluetoothLEDevice.FromBluetoothAddressAsync(lh.Address).AsTask();
                 potentialLighthouseTask.Wait();
 
+                if (ShowProgressToast) updateProgress(10);
+
                 Thread.Sleep(_delayCmd);
 
-                if (!potentialLighthouseTask.IsCompletedSuccessfully || potentialLighthouseTask.Result == null) exitProcess($"[{lh.Name}] Could not connect to lighthouse");
+                if (!potentialLighthouseTask.IsCompletedSuccessfully || potentialLighthouseTask.Result == null) exitProcess($"Could not connect to lighthouse");
 
                 using var btDevice = potentialLighthouseTask.Result;
+
+                if (ShowProgressToast) updateProgress(20);
 
                 Thread.Sleep(_delayCmd);
 
                 var gattServicesTask = btDevice.GetGattServicesAsync(BluetoothCacheMode.Uncached).AsTask();
                 gattServicesTask.Wait();
 
+                if (ShowProgressToast) updateProgress(30);
+
                 Thread.Sleep(_delayCmd);
 
-                if (!gattServicesTask.IsCompletedSuccessfully || gattServicesTask.Result.Status != GattCommunicationStatus.Success) exitProcess($"[{lh.Name}] Failed to get services");
+                if (!gattServicesTask.IsCompletedSuccessfully || gattServicesTask.Result.Status != GattCommunicationStatus.Success) exitProcess($"Failed to get services");
 
                 LogLine($"[{lh.Name}] Got services: {gattServicesTask.Result.Services.Count}");
 
@@ -1042,30 +1351,39 @@ namespace BSManager
 
                 using var service = gattServicesTask.Result.Services.SingleOrDefault(s => s.Uuid == _powerServGuid);
 
+                if (ShowProgressToast) updateProgress(40);
+
                 Thread.Sleep(_delayCmd);
 
-                if (service == null) exitProcess($"[{lh.Name}] Could not find power service");
+                if (service == null) exitProcess($"Could not find power service");
 
                 LogLine($"[{lh.Name}] Found power service");
 
                 var powerCharacteristicsTask = service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached).AsTask();
                 powerCharacteristicsTask.Wait();
 
+                if (ShowProgressToast) updateProgress(50);
+
                 Thread.Sleep(_delayCmd);
 
                 if (!powerCharacteristicsTask.IsCompletedSuccessfully || powerCharacteristicsTask.Result.Status != GattCommunicationStatus.Success)
-                    exitProcess($"[{lh.Name}] Could not get power service characteristics");
+                    exitProcess($"Could not get power service characteristics");
 
                 var powerChar = powerCharacteristicsTask.Result.Characteristics.SingleOrDefault(c => c.Uuid == _powerCharGuid);
 
+                if (ShowProgressToast) updateProgress(60);
+
                 Thread.Sleep(_delayCmd);
 
-                if (powerChar == null) exitProcess($"[{lh.Name}] Could not get power characteristic");
+                if (powerChar == null) exitProcess($"Could not get power characteristic");
+
+                if (ShowProgressToast) updateProgress(70);
 
                 Thread.Sleep(_delayCmd);
 
                 LogLine($"[{lh.Name}] Found power characteristic");
 
+                if (ShowProgressToast) updateProgress(80);
 
                 string data = v1_OFF;
                 if (command == "WAKEUP") data = v1_ON;
@@ -1092,9 +1410,11 @@ namespace BSManager
                 var writeResultTask = powerChar.WriteValueAsync(buff).AsTask();
                 writeResultTask.Wait();
 
+                if (ShowProgressToast) updateProgress(95);
+
                 Thread.Sleep(_delayCmd);
 
-                if (!writeResultTask.IsCompletedSuccessfully || writeResultTask.Result != GattCommunicationStatus.Success) exitProcess($"[{lh.Name}] Failed to write {command} command");
+                if (!writeResultTask.IsCompletedSuccessfully || writeResultTask.Result != GattCommunicationStatus.Success) exitProcess($"Failed to write {command} command");
 
                 lh.LastCmd = (command == "WAKEUP") ? LastCmd.WAKEUP : LastCmd.SLEEP;
                 lh.PoweredOn = (command == "WAKEUP") ? true : false;
@@ -1102,6 +1422,8 @@ namespace BSManager
                 btDevice.Dispose();
 
                 LogLine($"[{lh.Name}] SUCCESS command {command}");
+
+                if (ShowProgressToast) updateProgress(100, "Command received!");
 
                 Thread.Sleep(_delayCmd);
 
@@ -1123,18 +1445,20 @@ namespace BSManager
             catch (ProcessError ex)
             {
                 LogLine($"[{lh.Name}] ERROR Processing ({lh.HowManyErrors}): {ex}");
-                Interlocked.Exchange(ref processingCmdSync, 0);
-                if (lh.TooManyErrors) BalloonMsg($"{ex.Message}");
+                lh.ErrorStrings = lh.ErrorStrings.Insert(0, $"{ex.Message}\n");
+                if (lh.TooManyErrors) BalloonMsg($"{lh.ErrorStrings}", $"[{lh.Name}] LAST ERRORS:");
                 lh.LastCmd = LastCmd.ERROR;
                 ChangeBSMsg(lh.Name, lh.PoweredOn, lh.LastCmd, lh.Action);
+                Interlocked.Exchange(ref processingCmdSync, 0);
             }
             catch (Exception ex)
             {
                 LogLine($"[{lh.Name}] ERROR Exception Processing ({lh.HowManyErrors}): {ex}");
-                Interlocked.Exchange(ref processingCmdSync, 0);
                 lh.LastCmd = LastCmd.ERROR;
+                lh.ErrorStrings = lh.ErrorStrings.Insert(0, $"{ex.Message}\n");
+                if (lh.TooManyErrors) BalloonMsg($"{lh.ErrorStrings}", $"[{lh.Name}] LAST ERRORS:");
                 ChangeBSMsg(lh.Name, lh.PoweredOn, lh.LastCmd, lh.Action);
-                if (lh.TooManyErrors) HandleEx(ex);
+                Interlocked.Exchange(ref processingCmdSync, 0);
             }
         }
 
@@ -1194,7 +1518,7 @@ namespace BSManager
             {
                 if (!toolStripRunAtStartup.Checked)
                 {
-                    registryStart.SetValue("BSManager", Application.ExecutablePath);
+                    registryStart.SetValue("BSManager", MyExecutablePath);
                     toolStripRunAtStartup.Checked = true;
                 }
                 else
@@ -1251,15 +1575,38 @@ namespace BSManager
         }
 
 
-        public new void Dispose()
+        private void FindRuntime()
         {
-            ProcessLHtimer.Enabled = false;
-            ProcessLHtimer.Stop();
-            removeWatcher.Stop();
-            insertWatcher.Stop();
-            watcher.Stop();
-            Dispose(true);
-        }
+            try
+            {
+                using (RegistryKey registryManage = Registry.CurrentUser.OpenSubKey("SOFTWARE\\ManniX\\BSManager", true))
+                {
+                    ManagementObjectSearcher searcher = new ManagementObjectSearcher("SELECT * FROM Win32_Service");
+                    var collection = searcher.Get().Cast<ManagementBaseObject>()
+                            .Where(mbo => (string)mbo.GetPropertyValue("Name") == "PiServiceLauncher")
+                            .Select(mbo => (string)mbo.GetPropertyValue("PathName"));
+
+                    if (collection.Any())
+                    {
+                        RuntimePath = Path.GetDirectoryName(collection.First());
+
+                        LogLine($"[CONFIG] Found Runtime={RuntimePath}");
+                        registryManage.SetValue("ManageRuntimePath", RuntimePath);
+                        
+                    }
+                    else
+                    {
+                        BalloonMsg($"[CONFIG] Pimax Runtime not found");
+                        LogLine($"[CONFIG] Pimax Runtime not found");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                HandleEx(ex);
+            }
+
+}
 
         private void toolStripDebugLog_Click(object sender, EventArgs e)
         {
@@ -1278,77 +1625,75 @@ namespace BSManager
                 }
 
             }
-
         }
 
-        private void RuntimeToolStripMenuItem_Click(object sender, EventArgs e)
+        private void disableProgressToastToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            using (RegistryKey registryManage = Registry.CurrentUser.OpenSubKey("SOFTWARE\\ManniX\\BSManager", true))
+            try
             {
-                if (!RuntimeToolStripMenuItem.Checked)
+                using (RegistryKey registryManage = Registry.CurrentUser.OpenSubKey("SOFTWARE\\ManniX\\BSManager", true))
                 {
-                    try
+                    if (!disableProgressToastToolStripMenuItem.Checked)
                     {
-                        bool rFound = false;
-                        string _defaultpitool = "C:\\Program Files\\Pimax\\Runtime\\Pitool.exe";
-                        if (System.IO.File.Exists(_defaultpitool))
-                        {
-                            RuntimePath = Path.GetDirectoryName(_defaultpitool);
-                            LogLine($"[CONFIG] Found Runtime={RuntimePath}");
-                            registryManage.SetValue("ManageRuntimePath", RuntimePath);
-                            rFound = true;
-                        }
-                        else if (registryManage.GetValue("ManageRuntimePath") == null) { 
-                            using (RegistryKey registryRuntimeCheck = Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Services\\PiServiceLauncher", true))
-                            {
-
-                                RegistryKey registryRuntime;
-
-                                registryRuntime = Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Services\\PiServiceLauncher", true);
-
-                                if (registryRuntime.GetValue("ImagePath") == null)
-                                {
-                                    LogLine("[CONFIG] Runtime not found!");
-                                }
-                                else
-                                {
-                                    RuntimePath = Path.GetDirectoryName(registryRuntime.GetValue("ImagePath").ToString());
-                                    LogLine($"[CONFIG] Found Runtime={RuntimePath}");
-                                    registryManage.SetValue("ManageRuntimePath", RuntimePath);
-                                    rFound = true;
-                                }
-                            }
-                        }
-                        if (rFound)
-                        {
-                            ManageRuntime = true;
-                            registryManage.SetValue("ManageRuntime", "1");
-                            RuntimeToolStripMenuItem.Checked = true;
-                        } 
-                        else
-                        {
-                            BalloonErr("Pimax Runtime path not found, can't enable this option");
-                        }
+                        SetProgressToast = false;
+                        ShowProgressToast = false;
+                        registryManage.DeleteValue("ShowProgressToast", false);
+                        disableProgressToastToolStripMenuItem.Checked = true;
                     }
-                    catch (System.Security.SecurityException)
+                    else
                     {
-                        HandleEx(new Exception("You need to run BSManager with Admin privileges to enable this option, then you can keep running it without"));
+                        SetProgressToast = true;
+                        ShowProgressToast = true;
+                        registryManage.SetValue("ShowProgressToast", "1");
+                        disableProgressToastToolStripMenuItem.Checked = false;
                     }
-                    catch (Exception ex)
-                    {
-                        HandleEx(ex);
-                    }
-                }
-                else
-                {
-                    ManageRuntime = false;
-                    registryManage.DeleteValue("ManageRuntime", false);
-                    RuntimeToolStripMenuItem.Checked = false;
                 }
 
             }
+            catch (Exception ex)
+            {
+                HandleEx(ex);
+            }
+        }
+       
+        private void RuntimeToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                using (RegistryKey registryManage = Registry.CurrentUser.OpenSubKey("SOFTWARE\\ManniX\\BSManager", true))
+                {
+                    if (!RuntimeToolStripMenuItem.Checked)
+                    {
+                            ManageRuntime = true;
+                            registryManage.SetValue("ManageRuntime", "1");
+                            RuntimeToolStripMenuItem.Checked = true;
+                    }
+                    else
+                    {
+                        ManageRuntime = false;
+                        registryManage.DeleteValue("ManageRuntime", false);
+                        RuntimeToolStripMenuItem.Checked = false;
+                    }
+                }
+
+            }
+            catch (Exception ex)
+            {
+                HandleEx(ex);
+            }
 
         }
+        public new void Dispose()
+        {
+            ProcessLHtimer.Enabled = false;
+            ProcessLHtimer.Stop();
+            removeWatcher.Stop();
+            insertWatcher.Stop();
+            watcher.Stop();
+            Dispose(true);
+        }
+
+
     }
     public class ProcessError : Exception
     {
