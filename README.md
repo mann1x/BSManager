@@ -78,6 +78,8 @@ You can compile with Visual Studio 2019 and .NET Core 3.1.
 
 ## Changelog:
 
+- v2.4.1
+    - Fix: Bug in Run at Startup (watch out the AutoUpdater is impacted as well, you may need to update manually!)
 - v2.4.0
     - New: Toast for BS commands progress (so you know if it's actually doing something), can be disabled from Help and Info drop-down menu
     - New: Notifications and BLE errors improvements

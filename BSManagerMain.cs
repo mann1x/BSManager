@@ -221,7 +221,7 @@ namespace BSManager
 
                 AutoUpdater.ReportErrors = false;
                 AutoUpdater.InstalledVersion = new Version(_versionInfo);
-                AutoUpdater.DownloadPath = Application.StartupPath;
+                AutoUpdater.DownloadPath = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
                 AutoUpdater.RunUpdateAsAdmin = false;
                 AutoUpdater.Synchronous = true;
                 AutoUpdater.ParseUpdateInfoEvent += AutoUpdaterOnParseUpdateInfoEvent;
@@ -238,7 +238,7 @@ namespace BSManager
                     }
                     else
                     {
-                        if (_curpath != MyExecutablePath) registryStart.SetValue("BSManager", MyExecutablePath);
+                        if (_curpath != MyExecutableWithPath) registryStart.SetValue("BSManager", MyExecutableWithPath);
                         toolStripRunAtStartup.Checked = true;
                     }
                 }
@@ -1492,7 +1492,7 @@ namespace BSManager
                 IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(shortcutAddress);
                 shortcut.Description = "Open BSManager";
                 shortcut.Hotkey = "";
-                shortcut.TargetPath = MyExecutablePath;
+                shortcut.TargetPath = MyExecutableWithPath;
                 shortcut.Save();
             }
             catch (Exception ex)
@@ -1518,7 +1518,7 @@ namespace BSManager
             {
                 if (!toolStripRunAtStartup.Checked)
                 {
-                    registryStart.SetValue("BSManager", MyExecutablePath);
+                    registryStart.SetValue("BSManager", MyExecutableWithPath);
                     toolStripRunAtStartup.Checked = true;
                 }
                 else
@@ -1538,20 +1538,20 @@ namespace BSManager
             Process.Start(psi);
         }
 
-        private string MyExecutablePath
+        private string MyExecutableWithPath
         {
             get
             {
-                string path = Application.ExecutablePath;
-                string extension = Path.GetExtension(path).ToLower();
+                string filepath = Process.GetCurrentProcess().MainModule.FileName;
+                string extension = Path.GetExtension(filepath).ToLower();
                 if (String.Equals(extension, ".dll"))
                 {
-                    string folder = Path.GetDirectoryName(path);
-                    string fileName = Path.GetFileNameWithoutExtension(path);
+                    string folder = Path.GetDirectoryName(filepath);
+                    string fileName = Path.GetFileNameWithoutExtension(filepath);
                     fileName = String.Concat(fileName, ".exe");
-                    path = Path.Combine(folder, fileName);
+                    filepath = Path.Combine(folder, fileName);
                 }
-                return path;
+                return filepath;
             }
         }
 
