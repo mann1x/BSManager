@@ -231,7 +231,7 @@ namespace BSManager
 
                 using (RegistryKey registryStart = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
                 {
-                    string _curpath = registryStart.GetValue("BSManager").ToString();
+                    string _curpath = registryStart?.GetValue("BSManager")?.ToString();
                     if (_curpath == null)
                     {
                         toolStripRunAtStartup.Checked = false;
