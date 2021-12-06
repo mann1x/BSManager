@@ -448,7 +448,7 @@ namespace BSManager
                     }
                     catch (Win32Exception)
                     {
-                        LogLine($"[Manage Runtime] {_p2kill.ProcessName} can't be killed: not enogh privileges or already exiting");
+                        LogLine($"[Manage Runtime] {_p2kill.ProcessName} can't be killed: not enough privileges or already exiting");
                     }
                 }
 
@@ -539,6 +539,8 @@ namespace BSManager
 
 
                 if (ManageRuntime) {
+                    
+
                     if (!HeadSetState && LastManage) {
 
 #if DEBUG
@@ -569,6 +571,8 @@ namespace BSManager
 
                         if (kill_list.Length > 0)
                             loopKill(kill_list, false);
+
+                        SetOpenXRRuntime(OpenXRRuntime.Oculus);
 
                         LastManage = false;
 
@@ -637,6 +641,7 @@ namespace BSManager
                 if (_hmd.Length > 0)
                 {
                     if (SetProgressToast) ShowProgressToast = true;
+                    SetOpenXRRuntime(OpenXRRuntime.SteamVR);
                     LogLine($"[HMD] ## {_hmd} {action} ");
                     ChangeHMDStrip($" {_hmd} {action} ", true);
                     this.notifyIcon1.Icon = BSManagerRes.bsmanager_on;
@@ -650,6 +655,122 @@ namespace BSManager
             catch (Exception ex)
             {
                 HandleEx(ex);
+            }
+        }
+
+        private enum OpenXRRuntime
+        {
+            SteamVR,
+            Oculus,
+            WMR
+        }
+
+        private string GetRuntimeInstallPath(OpenXRRuntime runtime)
+        {
+            switch (runtime)
+            {
+                case OpenXRRuntime.SteamVR:
+                    using (RegistryKey key = Registry.LocalMachine.OpenSubKey("Software\\WOW6432Node\\Valve\\Steam", false))
+                    {
+                        if (key != null)
+                        {
+                            Object o = key.GetValue("InstallPath");
+                            return $@"{o}\steamapps\common\SteamVR\steamxr_win64.json";
+                        }
+                    }
+                break;
+                case OpenXRRuntime.Oculus:
+                    
+                    using (RegistryKey key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Oculus VR, LLC\Oculus", false))
+                    {
+                        if (key != null)
+                        {
+                            Object o = key.GetValue("Base");
+                            return $@"{o}\Support\oculus-runtime\oculus_openxr_64.json";
+                        }
+                    }
+                    break;
+                case OpenXRRuntime.WMR:
+                    //TODO
+                    break;
+            }
+           
+
+            return null;
+        }
+
+        private (OpenXRRuntime runtime, string Path) GetActiveOpenXRRuntime()
+        {
+            using RegistryKey reg =
+                Registry.LocalMachine.OpenSubKey("SOFTWARE\\Khronos\\OpenXR\\1");
+
+            if (reg != null)
+            {
+                string runtime = reg.GetValue("ActiveRuntime")?.ToString();
+                if (!string.IsNullOrEmpty(runtime) && File.Exists(runtime))
+                {
+                    if (runtime.Contains("steamxr"))
+                    {
+                        return (OpenXRRuntime.SteamVR, runtime);
+                    }
+
+                    if (runtime.Contains("oculus"))
+                    {
+                        return (OpenXRRuntime.Oculus, runtime);
+                    }
+                }
+            }
+
+            return default;
+        }
+
+        private void SetOpenXRRuntime(OpenXRRuntime xrRuntime)
+        {
+            LogLine($"Set OpenXR Runtime to {xrRuntime}");
+
+            string runtime = GetRuntimeInstallPath(xrRuntime);
+
+            if (string.IsNullOrEmpty(runtime))
+            {
+                LogLine($"Could not find {xrRuntime} install path");
+                return;
+            }
+            else
+            {
+                LogLine($@"Current OpenXR Runtime Path is ""{runtime}""");
+            }
+            
+            var (activeRuntime, activeRuntimePath) = GetActiveOpenXRRuntime();
+
+            if (!string.IsNullOrEmpty(runtime) && File.Exists(runtime))
+            {
+                using RegistryKey reg =
+                    Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Khronos\OpenXR\1", true); //requires admin
+
+                if (reg != null)
+                {
+                        
+                    if(activeRuntime != xrRuntime)
+                    {
+                        LogLine($@"Current OpenXR Runtime is ""{activeRuntime}""");
+
+                        if (!string.IsNullOrEmpty(activeRuntimePath))
+                        {
+                            reg.SetValue("ActiveRuntime", runtime);
+                            var before = (notifyIcon1.BalloonTipTitle, notifyIcon1.BalloonTipText);
+                            notifyIcon1.ShowBalloonTip(5000, "OpenXR",$"Set to ${xrRuntime}", notifyIcon1.BalloonTipIcon);
+
+                        }
+                    }
+                }
+                else
+                {
+                    LogLine("Could not find OpenXR registry key");
+                }
+            }
+            else
+            {
+                LogLine($@"Could not find OpenXR runtime ""{runtime}""");
             }
         }
 
