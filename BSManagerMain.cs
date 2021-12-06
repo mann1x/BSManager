@@ -758,7 +758,7 @@ namespace BSManager
                         {
                             reg.SetValue("ActiveRuntime", runtime);
                             var before = (notifyIcon1.BalloonTipTitle, notifyIcon1.BalloonTipText);
-                            notifyIcon1.ShowBalloonTip(5000, "OpenXR",$"Set to ${xrRuntime}", notifyIcon1.BalloonTipIcon);
+                            notifyIcon1.ShowBalloonTip(5000, "OpenXR",$"Set to {xrRuntime}", notifyIcon1.BalloonTipIcon);
 
                         }
                     }
