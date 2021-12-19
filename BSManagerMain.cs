@@ -633,6 +633,7 @@ namespace BSManager
 
                 if (did.Contains("VID_0483&PID_0101")) _hmd = "PIMAX HMD";
                 if (did.Contains("VID_2996&PID_0309")) _hmd = "VIVE PRO HMD";
+                if (did.Contains("VID_0BB4&PID_0313")) _hmd = "VIVE COSMOS HMD";
 
                 if (_hmd.Length > 0)
                 {
@@ -677,6 +678,7 @@ namespace BSManager
 
                 if (did.Contains("VID_0483&PID_0101")) _hmd = "PIMAX HMD";
                 if (did.Contains("VID_2996&PID_0309")) _hmd = "VIVE PRO HMD";
+                if (did.Contains("VID_0BB4&PID_0313")) _hmd = "VIVE COSMOS HMD";
 
                 if (_hmd.Length > 0)
                 {
