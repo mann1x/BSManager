@@ -231,7 +231,7 @@ namespace BSManager
 
                 using (RegistryKey registryStart = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
                 {
-                    string _curpath = registryStart.GetValue("BSManager").ToString();
+                    string _curpath = registryStart.GetValue("BSManager")?.ToString();
                     if (_curpath == null)
                     {
                         toolStripRunAtStartup.Checked = false;
@@ -636,7 +636,8 @@ namespace BSManager
                 string action = "ON";
 
                 if (did.Contains("VID_0483&PID_0101")) _hmd = "PIMAX HMD";
-                if (did.Contains("VID_2996&PID_0309")) _hmd = "VIVE PRO HMD";
+                else if (did.Contains("VID_2996&PID_0309")) _hmd = "VIVE PRO HMD";
+                else if (did.Contains("VID_17E9&PID_6101")) _hmd = "VIVE WIRELESS ADAPTER";
 
                 if (_hmd.Length > 0)
                 {
@@ -725,52 +726,62 @@ namespace BSManager
         }
 
         private void SetOpenXRRuntime(OpenXRRuntime xrRuntime)
-        {
-            LogLine($"Set OpenXR Runtime to {xrRuntime}");
-
-            string runtime = GetRuntimeInstallPath(xrRuntime);
-
-            if (string.IsNullOrEmpty(runtime))
+        { try
             {
-                LogLine($"Could not find {xrRuntime} install path");
-                return;
-            }
-            else
-            {
-                LogLine($@"Current OpenXR Runtime Path is ""{runtime}""");
-            }
-            
-            var (activeRuntime, activeRuntimePath) = GetActiveOpenXRRuntime();
 
-            if (!string.IsNullOrEmpty(runtime) && File.Exists(runtime))
-            {
-                using RegistryKey reg =
-                    Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Khronos\OpenXR\1", true); //requires admin
 
-                if (reg != null)
+                LogLine($"Set OpenXR Runtime to {xrRuntime}");
+
+                string runtime = GetRuntimeInstallPath(xrRuntime);
+
+                if (string.IsNullOrEmpty(runtime))
                 {
-                        
-                    if(activeRuntime != xrRuntime)
+                    LogLine($"Could not find {xrRuntime} install path");
+                    return;
+                }
+                else
+                {
+                    LogLine($@"Current OpenXR Runtime Path is ""{runtime}""");
+                }
+
+                var (activeRuntime, activeRuntimePath) = GetActiveOpenXRRuntime();
+
+                if (!string.IsNullOrEmpty(runtime) && File.Exists(runtime))
+                {
+                    using RegistryKey reg =
+                        Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Khronos\OpenXR\1", true); //requires admin
+
+                    if (reg != null)
                     {
-                        LogLine($@"Current OpenXR Runtime is ""{activeRuntime}""");
 
-                        if (!string.IsNullOrEmpty(activeRuntimePath))
+                        if (activeRuntime != xrRuntime)
                         {
-                            reg.SetValue("ActiveRuntime", runtime);
-                            var before = (notifyIcon1.BalloonTipTitle, notifyIcon1.BalloonTipText);
-                            notifyIcon1.ShowBalloonTip(5000, "OpenXR",$"Set to {xrRuntime}", notifyIcon1.BalloonTipIcon);
+                            LogLine($@"Current OpenXR Runtime is ""{activeRuntime}""");
 
+                            if (!string.IsNullOrEmpty(activeRuntimePath))
+                            {
+                                reg.SetValue("ActiveRuntime", runtime);
+                                var before = (notifyIcon1.BalloonTipTitle, notifyIcon1.BalloonTipText);
+                                notifyIcon1.ShowBalloonTip(5000, "OpenXR", $"Set to {xrRuntime}", notifyIcon1.BalloonTipIcon);
+
+                            }
                         }
+                    }
+                    else
+                    {
+                        LogLine("Could not find OpenXR registry key");
                     }
                 }
                 else
                 {
-                    LogLine("Could not find OpenXR registry key");
+                    LogLine($@"Could not find OpenXR runtime ""{runtime}""");
                 }
-            }
-            else
+
+            } 
+            catch(Exception ex)
             {
-                LogLine($@"Could not find OpenXR runtime ""{runtime}""");
+                notifyIcon1.ShowBalloonTip(5000, "OpenXR", ex.Message, notifyIcon1.BalloonTipIcon);
+                LogLine(ex.Message);
             }
         }
 
