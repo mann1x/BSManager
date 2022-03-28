@@ -632,7 +632,8 @@ namespace BSManager
                 string action = "ON";
 
                 if (did.Contains("VID_0483&PID_0101")) _hmd = "PIMAX HMD";
-                if (did.Contains("VID_2996&PID_0309")) _hmd = "VIVE PRO HMD";
+                else if (did.Contains("VID_2996&PID_0309")) _hmd = "VIVE PRO HMD";
+                else if (did.Contains("VID_17E9&PID_6101")) _hmd = "VIVE WIRELESS ADAPTER";
 
                 if (_hmd.Length > 0)
                 {
