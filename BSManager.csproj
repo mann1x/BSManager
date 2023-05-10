@@ -122,9 +122,11 @@
     <Version>2.4.1</Version>
     <Copyright>ManniX</Copyright>
     <Description>VR Base Stations Manager for Pimax and Vive Pro HeadSets</Description>
-    <PackageProjectUrl>https://github.com/mann1x/BSManager</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/mann1x/BSManager</RepositoryUrl>
-    <RepositoryType>GitHub</RepositoryType>
+    <PackageProjectUrl>https://github.com/GeekAndProud/BSManager</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/GeekAndProud/BSManager</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <AssemblyVersion>2.4.1.1</AssemblyVersion>
+    <FileVersion>2.4.1.1</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
