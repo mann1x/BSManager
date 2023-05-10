@@ -244,6 +244,10 @@ namespace BSManager
                             toolStripRunAtStartup.Checked = true;
                         }
                     }
+                    else
+                    {
+                        registryStart.SetValue("BSManager", "");
+                    }
                 }
 
                 string[] _glist = null;
