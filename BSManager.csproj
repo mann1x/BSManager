@@ -119,14 +119,14 @@
 
   <PropertyGroup>
     <PublishReadyToRun>true</PublishReadyToRun>
-    <Version>2.4.1</Version>
+    <Version>2.4.2</Version>
     <Copyright>ManniX</Copyright>
     <Description>VR Base Stations Manager for Pimax and Vive Pro HeadSets</Description>
     <PackageProjectUrl>https://github.com/GeekAndProud/BSManager</PackageProjectUrl>
     <RepositoryUrl>https://github.com/GeekAndProud/BSManager</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <AssemblyVersion>2.4.1.1</AssemblyVersion>
-    <FileVersion>2.4.1.1</FileVersion>
+    <AssemblyVersion>2.4.2</AssemblyVersion>
+    <FileVersion>2.4.2</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
