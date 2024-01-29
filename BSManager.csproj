@@ -1,9 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
-    <RuntimeIdentifiers>win10-x64</RuntimeIdentifiers>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>bsmanager.ico</ApplicationIcon>
     <StartupObject>BSManager.Program</StartupObject>
@@ -16,29 +14,23 @@
     <Configurations>Debug;Release;Release Profiler</Configurations>
     <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
-
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <DefineConstants>TRACE</DefineConstants>
   </PropertyGroup>
-
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <DefineConstants>TRACE</DefineConstants>
   </PropertyGroup>
-
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release Profiler|AnyCPU'">
     <DefineConstants>TRACE</DefineConstants>
   </PropertyGroup>
-
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release Profiler|x64'">
     <DefineConstants>TRACE</DefineConstants>
   </PropertyGroup>
-
   <ItemGroup>
     <Compile Remove="DesktopToast\**" />
     <EmbeddedResource Remove="DesktopToast\**" />
     <None Remove="DesktopToast\**" />
   </ItemGroup>
-
   <ItemGroup>
     <None Remove="bsmanager.ico" />
     <None Remove="bsmanager_on.ico" />
@@ -56,14 +48,15 @@
     </COMReference>
     <None Include="bsmanager.png">
       <Pack>True</Pack>
-      <PackagePath></PackagePath>
+      <PackagePath>
+      </PackagePath>
     </None>
     <None Include="LICENSE">
       <Pack>True</Pack>
-      <PackagePath></PackagePath>
+      <PackagePath>
+      </PackagePath>
     </None>
   </ItemGroup>
-
   <ItemGroup>
     <EmbeddedResource Include="bsmanager.ico">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
@@ -75,17 +68,14 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </EmbeddedResource>
   </ItemGroup>
-
   <ItemGroup>
-    <PackageReference Include="Autoupdater.NET.Official" Version="1.7.0" />
-    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.0" />
-    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.19041.1" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    <PackageReference Include="Autoupdater.NET.Official" Version="1.8.4" />
+    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
     <PackageReference Include="NUnit" Version="3.13.2" />
-    <PackageReference Include="System.Management" Version="5.0.0" />
-    <PackageReference Include="System.ServiceProcess.ServiceController" Version="5.0.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
   </ItemGroup>
-
   <ItemGroup>
     <Compile Update="Properties\Settings.Designer.cs">
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
@@ -98,41 +88,36 @@
       <DependentUpon>BSManagerRes.resx</DependentUpon>
     </Compile>
   </ItemGroup>
-
   <ItemGroup>
     <EmbeddedResource Update="BSManagerRes.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>BSManagerRes.Designer.cs</LastGenOutput>
     </EmbeddedResource>
   </ItemGroup>
-
   <ItemGroup>
     <None Update="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
     </None>
   </ItemGroup>
-
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
   </PropertyGroup>
-
   <PropertyGroup>
     <PublishReadyToRun>true</PublishReadyToRun>
-    <Version>2.4.1</Version>
+    <Version>2.4.2</Version>
     <Copyright>ManniX</Copyright>
     <Description>VR Base Stations Manager for Pimax and Vive Pro HeadSets</Description>
-    <PackageProjectUrl>https://github.com/mann1x/BSManager</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/mann1x/BSManager</RepositoryUrl>
-    <RepositoryType>GitHub</RepositoryType>
+    <PackageProjectUrl>https://github.com/GeekAndProud/BSManager</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/GeekAndProud/BSManager</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <AssemblyVersion>2.5.0</AssemblyVersion>
+    <FileVersion>2.5.0</FileVersion>
   </PropertyGroup>
-
   <ItemGroup>
     <None Remove="C:\Users\manni\.nuget\packages\deepspeech\0.9.3\build\libdeepspeech.so" />
   </ItemGroup>
-
   <ItemGroup>
     <None Remove="C:\Users\manni\.nuget\packages\deepspeech\0.9.3\build\libdeepspeech.so" />
   </ItemGroup>
-  
 </Project>

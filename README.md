@@ -1,4 +1,4 @@
-﻿# BSManager
+﻿﻿# BSManager
 
 
 BSManager is a small portable utility to switch automatically on and off the Vive Base Stations with the VR Headset.
@@ -77,7 +77,10 @@ You can compile with Visual Studio 2019 and .NET Core 3.1.
 
 
 ## Changelog:
-
+- 2.5.0
+    - Update to .Net8
+- 2.4.2
+    - Fixed the error caused by a non existant registry key
 - v2.4.1
     - Fix: Bug in Run at Startup (watch out the AutoUpdater is impacted as well, you may need to update manually!)
 - v2.4.0

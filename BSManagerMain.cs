@@ -231,20 +231,27 @@ namespace BSManager
 
                 using (RegistryKey registryStart = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
                 {
-                    string _curpath = registryStart.GetValue("BSManager").ToString();
-                    if (_curpath == null)
+                    if (registryStart.GetValue("BSManager") != null)
                     {
-                        toolStripRunAtStartup.Checked = false;
+                        string _curpath = registryStart.GetValue("BSManager").ToString();
+                        if (_curpath == null)
+                        {
+                            toolStripRunAtStartup.Checked = false;
+                        }
+                        else
+                        {
+                            if (_curpath != MyExecutableWithPath) registryStart.SetValue("BSManager", MyExecutableWithPath);
+                            toolStripRunAtStartup.Checked = true;
+                        }
                     }
                     else
                     {
-                        if (_curpath != MyExecutableWithPath) registryStart.SetValue("BSManager", MyExecutableWithPath);
-                        toolStripRunAtStartup.Checked = true;
+                        registryStart.SetValue("BSManager", "");
                     }
                 }
 
-                string [] _glist = null;
-                string [] _klist = null;
+                string[] _glist = null;
+                string[] _klist = null;
 
                 _glist = ProcListLoad(fnGraceList, "graceful");
                 _klist = ProcListLoad(fnKillList, "immediate");
@@ -261,7 +268,7 @@ namespace BSManager
                 }
                 else
                 {
-                    slhfound = Load_LH_DB("SteamVR" );
+                    slhfound = Load_LH_DB("SteamVR");
                     if (!slhfound) { SteamVR_DB_ToolStripMenuItem.Text = "SteamVR DB file parse error"; }
                     else
                     {
@@ -346,7 +353,8 @@ namespace BSManager
 
         private void HandleEx(Exception ex)
         {
-            try {
+            try
+            {
                 string _msg = ex.Message;
                 if (ex.Source != string.Empty && ex.Source != null) _msg = $"{_msg} Source: {ex.Source}";
                 new ToastContentBuilder()
@@ -370,7 +378,8 @@ namespace BSManager
         public static void LogLine(string msg)
         {
             Trace.WriteLine($"{msg}");
-            if (debugLog) {
+            if (debugLog)
+            {
                 traceDbg.WriteLine($"[{DateTime.Now}] {msg}");
                 traceDbg.Flush();
             }
@@ -538,17 +547,19 @@ namespace BSManager
                 }
 
 
-                if (ManageRuntime) {
-                    if (!HeadSetState && LastManage) {
+                if (ManageRuntime)
+                {
+                    if (!HeadSetState && LastManage)
+                    {
 
 #if DEBUG
-                        
+
                         Process[] localAll = Process.GetProcesses();
                         foreach (Process processo in localAll)
                         {
                             LogLine($"[PROCESSES] Active: {processo.ProcessName} PID={processo.Id}");
                         }
-                        
+
 #endif
                         ServiceController sc = new ServiceController("PiServiceLauncher");
                         LogLine($"[Manage Runtime] PiService is currently: {sc.Status}");
@@ -655,7 +666,8 @@ namespace BSManager
 
         private void checkLHState(Func<Lighthouse, bool> lighthousePredicate, bool hs_state)
         {
-            if (HeadSetState == hs_state) {
+            if (HeadSetState == hs_state)
+            {
                 var results = _lighthouses.Where(lighthousePredicate);
                 if (results.Any())
                 {
@@ -723,7 +735,8 @@ namespace BSManager
 
         private void DeviceRemovedEvent(object sender, EventArrivedEventArgs e)
         {
-            try {
+            try
+            {
                 ManagementBaseObject instance = (ManagementBaseObject)e.NewEvent["TargetInstance"];
                 foreach (var property in instance.Properties)
                 {
@@ -783,7 +796,7 @@ namespace BSManager
             {
                 bool _done = true;
 
-                if (V2BaseStationsVive  && LastCmdSent == LastCmd.SLEEP && !HeadSetState)
+                if (V2BaseStationsVive && LastCmdSent == LastCmd.SLEEP && !HeadSetState)
                 {
                     TimeSpan _delta = DateTime.Now - LastCmdStamp;
 
@@ -862,7 +875,7 @@ namespace BSManager
         {
             try
             {
-                BeginInvoke((MethodInvoker)delegate {
+                BeginInvoke((System.Windows.Forms.MethodInvoker)delegate {
                     ToolStripMenuItemHmd.Text = label;
                     ToolStripMenuItemHmd.Checked = _checked;
                 });
@@ -877,7 +890,7 @@ namespace BSManager
         {
             try
             {
-                BeginInvoke((MethodInvoker)delegate {
+                BeginInvoke((System.Windows.Forms.MethodInvoker)delegate {
                     ToolStripMenuItemDisco.Text = $"Discovered: {count}/{bsCount}";
                     toolStripMenuItemBS.DropDownItems.Add(nameBS);
                 });
@@ -918,7 +931,7 @@ namespace BSManager
                         break;
                 }
 
-                BeginInvoke((MethodInvoker)delegate {
+                BeginInvoke((System.Windows.Forms.MethodInvoker)delegate {
                     foreach (ToolStripMenuItem item in toolStripMenuItemBS.DropDownItems)
                     {
                         if (item.Text.StartsWith(_name))
@@ -1065,7 +1078,8 @@ namespace BSManager
 
         private void AdvertisementWatcher_Received(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
         {
-            try {
+            try
+            {
 
                 //Trace.WriteLine($"Advertisment: {args.Advertisement.LocalName}");
 
@@ -1094,7 +1108,8 @@ namespace BSManager
                     var valveData = args.Advertisement.GetManufacturerDataByCompanyId(0x055D);
                     var htcData = args.Advertisement.GetManufacturerDataByCompanyId(0x02ED);
 
-                    if (valveData.Count > 0) {
+                    if (valveData.Count > 0)
+                    {
 
                         existing.Manufacturer = BSManufacturer.VIVE;
 
@@ -1224,21 +1239,22 @@ namespace BSManager
                 uint pidx = 1;
                 string ptag = "LHProcess";
                 string pgroup = "LHProcess";
-                
+
                 int _leftDone = 0;
-                foreach (Lighthouse lhDone in _lighthouses) {
+                foreach (Lighthouse lhDone in _lighthouses)
+                {
                     if (lhDone.ProcessDone) _leftDone++;
                 }
 
                 lh.OpsTotal++;
 
-                int _doneCount=_leftDone+1;
+                int _doneCount = _leftDone + 1;
 
                 var pcontent = new ToastContentBuilder()
                     .AddArgument("action", "viewConversation")
                     .AddArgument("conversationId", 9113)
                     .AddText("Commandeering the Base Stations...")
-                    .AddAudio(null,null,true)
+                    .AddAudio(null, null, true)
                     .AddVisualChild(new AdaptiveProgressBar()
                     {
                         Title = new BindableString("title"),
@@ -1269,7 +1285,7 @@ namespace BSManager
 
                     ptoastNotificationList.Add(ptoast);
                     if (ShowProgressToast) ToastNotificationManagerCompat.CreateToastNotifier().Show(ptoast);
-                } 
+                }
                 else
                 {
                     ptoast = ptoastNotificationList[0];
@@ -1485,7 +1501,8 @@ namespace BSManager
 
         private void createDesktopShortcutToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            try {
+            try
+            {
                 object shDesktop = (object)"Desktop";
                 WshShell shell = new WshShell();
                 string shortcutAddress = (string)shell.SpecialFolders.Item(ref shDesktop) + @"\BSManager.lnk";
@@ -1592,7 +1609,7 @@ namespace BSManager
 
                         LogLine($"[CONFIG] Found Runtime={RuntimePath}");
                         registryManage.SetValue("ManageRuntimePath", RuntimePath);
-                        
+
                     }
                     else
                     {
@@ -1606,7 +1623,7 @@ namespace BSManager
                 HandleEx(ex);
             }
 
-}
+        }
 
         private void toolStripDebugLog_Click(object sender, EventArgs e)
         {
@@ -1655,7 +1672,7 @@ namespace BSManager
                 HandleEx(ex);
             }
         }
-       
+
         private void RuntimeToolStripMenuItem_Click(object sender, EventArgs e)
         {
             try
@@ -1664,9 +1681,9 @@ namespace BSManager
                 {
                     if (!RuntimeToolStripMenuItem.Checked)
                     {
-                            ManageRuntime = true;
-                            registryManage.SetValue("ManageRuntime", "1");
-                            RuntimeToolStripMenuItem.Checked = true;
+                        ManageRuntime = true;
+                        registryManage.SetValue("ManageRuntime", "1");
+                        RuntimeToolStripMenuItem.Checked = true;
                     }
                     else
                     {
