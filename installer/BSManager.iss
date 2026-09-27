@@ -67,6 +67,10 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
 
+[UninstallRun]
+; Elevated task registered by the "OpenXR to SteamVR" option (may need administrator rights to delete; ignored if it fails)
+Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""BSManager\OpenXR runtime"" /F"; Flags: runhidden; RunOnceId: "DelOpenXRTask"
+
 [UninstallDelete]
 Type: files; Name: "{app}\BSManager.log"
 

@@ -44,7 +44,7 @@ iscc /DAppVersion=2.5.0 /DSourceExe=$PWD\out\BSManager.exe /Oout installer\BSMan
 
 - `BSManagerMain.cs`: tray menu, settings (`HKCU\SOFTWARE\ManniX\BSManager`), headset detection over WMI USB events, base station control, Manage Runtime.
 - Supported headsets are the `HmdDevices` table (USB `VID_xxxx&PID_xxxx` → name): one entry covers both power on and power off.
-- `OpenXRRuntime.cs`: the optional "OpenXR to SteamVR" switch (HKLM `SOFTWARE\Khronos\OpenXR\1`, needs administrator; the previous runtime is kept in the settings as `OpenXRPreviousRuntime` until restored).
+- `OpenXRRuntime.cs`: the optional "OpenXR to SteamVR" switch (HKLM `SOFTWARE\Khronos\OpenXR\1`). Enabling it elevates once (`BSManager.exe --openxr-register-task <SID>`) to register the scheduled task `BSManager\OpenXR runtime`, which runs `BSManager.exe --openxr-apply` with the user's highest privileges; the tray app writes the wanted runtime to `OpenXRTarget` in the settings and starts the task. The elevated side only accepts runtimes listed under `AvailableRuntimes`. The previous runtime is kept as `OpenXRPreviousRuntime` until restored.
 - `LightHouse.cs`, `BLEHelper.cs`: base stations and BLE commands.
 
 ## CI
