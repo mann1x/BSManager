@@ -16,16 +16,15 @@ using Microsoft.Win32;
 using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using IWshRuntimeLibrary;
 using AutoUpdaterDotNET;
 using System.Runtime.Serialization;
 using System.Timers;
 using System.ServiceProcess;
 using File = System.IO.File;
+using MethodInvoker = System.Windows.Forms.MethodInvoker;
 using System.Text;
 using Microsoft.Toolkit.Uwp.Notifications;
 using System.IO.Packaging;
-using NUnit.Framework;
 using System.Globalization;
 
 namespace BSManager
@@ -324,7 +323,8 @@ namespace BSManager
                 const string scheme = "pack";
                 if (!UriParser.IsKnownScheme(scheme))
                 {
-                    Assert.That(PackUriHelper.UriSchemePack, Is.EqualTo(scheme));
+                    // Reading UriSchemePack registers the pack:// scheme
+                    _ = PackUriHelper.UriSchemePack;
                 }
 
                 // Listen to notification activation
@@ -1486,10 +1486,10 @@ namespace BSManager
         private void createDesktopShortcutToolStripMenuItem_Click(object sender, EventArgs e)
         {
             try {
-                object shDesktop = (object)"Desktop";
-                WshShell shell = new WshShell();
-                string shortcutAddress = (string)shell.SpecialFolders.Item(ref shDesktop) + @"\BSManager.lnk";
-                IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(shortcutAddress);
+                // WScript.Shell through late binding: no COM interop assembly to generate at build time
+                dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
+                string shortcutAddress = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "BSManager.lnk");
+                dynamic shortcut = shell.CreateShortcut(shortcutAddress);
                 shortcut.Description = "Open BSManager";
                 shortcut.Hotkey = "";
                 shortcut.TargetPath = MyExecutableWithPath;

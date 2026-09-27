@@ -1,6 +1,6 @@
 name: CI
 
-# Every push and PR: build the Windows single-file executable.
+# Every push and PR: build the Windows single-file executable and its installer.
 # Pushes to dev publish a pre-release, pushes to master publish a release (only when the build passed).
 on:
   push:
@@ -29,22 +29,33 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The project has a COM reference (IWshRuntimeLibrary), which only the Visual Studio MSBuild can resolve
-      - uses: microsoft/setup-msbuild@v2
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
 
-      - name: Build and publish self-contained single file
+      - name: Publish self-contained single file
         shell: pwsh
         run: |
-          msbuild BSManager.csproj -restore -t:Publish -m -nologo -v:minimal `
-            -p:Configuration=Release -p:Platform=x64 `
-            -p:RuntimeIdentifier=win10-x64 -p:SelfContained=true `
-            -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:DebugType=None `
-            -p:PublishDir="$PWD\out\"
+          # Single file, self-contained, ReadyToRun and compression are set in BSManager.csproj
+          dotnet publish BSManager.csproj -c Release -r win-x64 -p:DebugType=None -o out
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item out\BSManager.exe dist\BSManager.exe
           # The auto-updater downloads BSManager.zip and extracts it next to the running executable
           Compress-Archive -Path dist\BSManager.exe -DestinationPath dist\BSManager.zip
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content BSManager.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          $iscc = Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe", "$env:ProgramFiles\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $iscc) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $iscc = Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe", "$env:ProgramFiles\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          }
+          & $iscc "/DAppVersion=$version" "/DSourceExe=$PWD\dist\BSManager.exe" "/O$PWD\dist" installer\BSManager.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-ChildItem dist
 
       - uses: actions/upload-artifact@v7
@@ -139,6 +150,7 @@ jobs:
           cat >> notes.md <<'EOF'
 
           ## Downloads
+          - **BSManager-setup.exe** — installer (per user, or for all users from the privileges dialog)
           - **BSManager.zip** — Windows x64 self-contained executable, zipped (used by the auto-updater)
           - **BSManager.exe** — the same executable, not zipped
           EOF
@@ -147,7 +159,7 @@ jobs:
         run: |
           flags=(--target "$GITHUB_SHA" --title "BSManager $TAG" --notes-file notes.md)
           if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); else flags+=(--latest); fi
-          gh release create "$TAG" "${flags[@]}" dist/BSManager.zip dist/BSManager.exe
+          gh release create "$TAG" "${flags[@]}" dist/BSManager-setup.exe dist/BSManager.zip dist/BSManager.exe
 
       # Releases only: installed copies read BSManager/AutoUpdaterBSManager.json from master, so offer them the
       # new version through a PR into master (merging it publishes nothing, the version is already released).

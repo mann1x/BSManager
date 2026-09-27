@@ -16,28 +16,35 @@ GitHub settings (Settings → Rules → Rulesets), set by the repository owner:
 ## Development cycle
 
 1. Pick an item (issue or idea). Branch from `dev`: `git switch -c fix/bs-v2-wakeup origin/dev`.
-2. Build and try the change locally (Visual Studio, or `msbuild BSManager.csproj -restore -p:Configuration=Release -p:Platform=x64`).
+2. Build and try the change locally (Visual Studio, or `dotnet build -c Release`).
 3. Open a PR into `dev`. CI must be green.
 4. Update the **Changelog in README.md** under the entry of the next, unreleased version (never under an already-released version; never bump `<Version>` in a feature PR).
 5. Squash-merge. The merge publishes a `dev` pre-release automatically.
 
 ## Build
 
-BSManager is a Windows-only WinForms app (`netcoreapp3.1`, `win10-x64`). It has a COM reference (`IWshRuntimeLibrary`), so it builds with the Visual Studio MSBuild (`msbuild`), not with `dotnet build`.
-
-Release build, as CI does it:
+BSManager is a Windows-only WinForms app (`net10.0-windows10.0.19041.0`, `win-x64`). It builds with the .NET 10 SDK, from Visual Studio 2026 or the command line; on Linux/macOS add `-p:EnableWindowsTargeting=true` to compile (it only runs on Windows).
 
 ```powershell
-msbuild BSManager.csproj -restore -t:Publish -p:Configuration=Release -p:Platform=x64 `
-  -p:RuntimeIdentifier=win10-x64 -p:SelfContained=true -p:PublishSingleFile=true `
-  -p:PublishReadyToRun=true -p:DebugType=None -p:PublishDir="$PWD\out\"
+dotnet build -c Release                                   # debug/test build
+dotnet publish BSManager.csproj -c Release -r win-x64 -o out   # self-contained single-file out\BSManager.exe, as CI does
+```
+
+Single file, self-contained, ReadyToRun and compression are set in `BSManager.csproj`.
+
+### Installer
+
+`installer/BSManager.iss` is an Inno Setup 6 script. It installs per user by default (no admin prompt, so the auto-updater can replace the executable), with "all users" available from the privileges dialog; tasks for a desktop icon and Run at logon (the same `HKCU\...\Run\BSManager` value as the tray menu). Uninstall removes the Run value. Build it locally after publishing:
+
+```powershell
+iscc /DAppVersion=2.5.0 /DSourceExe=$PWD\out\BSManager.exe /Oout installer\BSManager.iss
 ```
 
 ## CI
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `ci.yml` | every push; PRs into `master`/`dev` | builds the self-contained single-file `BSManager.exe` on Windows and uploads it (with `BSManager.zip`) as the `BSManager` artifact of the run; on `dev`/`master` pushes also publishes (see *Releases*) |
+| `ci.yml` | every push; PRs into `master`/`dev` | builds the self-contained single-file `BSManager.exe` and `BSManager-setup.exe` on Windows and uploads them (with `BSManager.zip`) as the `BSManager` artifact of the run; on `dev`/`master` pushes also publishes (see *Releases*) |
 
 ## Releases
 
@@ -48,7 +55,7 @@ Publishing is automatic and gated on the `Build` job:
 | `dev` | **pre-release** | `v<next>-dev.<run number>`: `<next>` is `<Version>` of `BSManager.csproj` if that version is not released yet, else the next patch version. The 10 newest dev pre-releases are kept. |
 | `master` | **release** (marked latest) | `v<Version>`, only if that release does not exist yet (otherwise nothing is published) |
 
-Assets: `BSManager.zip` (the executable, zipped; this is what the auto-updater downloads) and `BSManager.exe`. Release notes are the `- v<Version>` entry of the README changelog.
+Assets: `BSManager-setup.exe` (installer), `BSManager.zip` (the executable, zipped; this is what the auto-updater downloads) and `BSManager.exe`. Release notes are the `- v<Version>` entry of the README changelog.
 
 ### Auto-updater
 

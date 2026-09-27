@@ -13,9 +13,9 @@ Base Stations v1 and v2 are both supported.
 
 ## Installation
 
-It's a portable application; the only software pre-requisite is the Desktop Runtime for .NET Core 3.1 (https://versionsof.net/core/3.1/3.1.19/) but it should be self-contained.
+Download `BSManager-setup.exe` from the [releases](https://github.com/mann1x/BSManager/releases) and run it. It installs for the current user without admin rights (you can choose all users instead), and can add a desktop icon and run BSManager at logon.
 
-Move it into a permanent directory, you can create a shortcut to launch it or use the drop-down menu option to create it on the desktop.
+BSManager is also available as a portable, self-contained executable (`BSManager.exe`, or zipped as `BSManager.zip`) with no pre-requisites: move it into a permanent directory, you can create a shortcut to launch it or use the drop-down menu option to create it on the desktop. Windows 10 1809 or later, x64.
 
 If you wish in the drop-down menu you can also select "Run at Startup" and it will be run at every current user logon.
 
@@ -73,13 +73,16 @@ The immediate killing list (SIGTERM) is empty by default and can be customized u
 
 ## Compilation
 
-You can compile with Visual Studio 2019 and .NET Core 3.1.
+You can compile with the .NET 10 SDK (Visual Studio 2026 or `dotnet build`).
 
 Branches, CI and the release process are described in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): changes go through pull requests into `dev`, releases are published from `master`.
 
 
 ## Changelog:
 
+- v2.5.0
+    - New: Moved from .NET Core 3.1 to .NET 10 (smaller self-contained executable, about 100 MB instead of 160 MB)
+    - New: Installer (`BSManager-setup.exe`), per user or for all users, with desktop icon and Run at logon options
 - v2.4.1
     - Fix: Bug in Run at Startup (watch out the AutoUpdater is impacted as well, you may need to update manually!)
 - v2.4.0
