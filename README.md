@@ -50,7 +50,7 @@ Only for the BS v1 the Stations will be briefly powered on, about 30 seconds, to
 
 BSManager can automatically start & kill Pimax Runtime & close selected SteamVR components (which reduces risk of SteamVR crashes).
 
-BSManager can also make SteamVR the OpenXR runtime while the headset is on: enable "OpenXR to SteamVR" in the System Tray Icon drop-down menu. When the headset goes off the runtime that was active before (Oculus, WMR, ...) is restored. Windows keeps the active OpenXR runtime in HKLM, so this option needs BSManager to run as Administrator.
+BSManager can also make SteamVR the OpenXR runtime while the headset is on: enable "OpenXR to SteamVR" in the System Tray Icon drop-down menu. When the headset goes off the runtime that was active before (Oculus, WMR, ...) is restored. Windows keeps the active OpenXR runtime in HKLM, so enabling the option asks once for administrator permission (UAC): BSManager registers a scheduled task that makes the switches from then on without further prompts. Only runtimes registered with OpenXR (Oculus, SteamVR, WMR, ...) can be selected.
 
 Manage Runtime is an option that can be enabled in the System Tray Icon drop-down menu; it can be enabled if the Pimax Runtime is not in the default directory running only once BSManager with Admin privileges.
 
@@ -87,7 +87,7 @@ Branches, CI and the release process are described in [docs/DEVELOPMENT.md](docs
     - New: Moved from .NET Core 3.1 to .NET 10 (smaller self-contained executable, about 100 MB instead of 160 MB)
     - New: Installer (`BSManager-setup.exe`), per user or for all users, with desktop icon and Run at logon options
     - New: Support for the Vive Cosmos (thanks zra123) and the Vive Wireless Adapter (thanks drowhunter)
-    - New: Optional "OpenXR to SteamVR": SteamVR is the OpenXR runtime while the headset is on, the previous runtime is restored when it goes off (needs Administrator; idea by drowhunter)
+    - New: Optional "OpenXR to SteamVR": SteamVR is the OpenXR runtime while the headset is on, the previous runtime is restored when it goes off (asks for administrator permission once; idea by drowhunter)
     - Fix: Startup error when Run at Startup was never enabled, which skipped the rest of the initialization (thanks drowhunter)
 - v2.4.1
     - Fix: Bug in Run at Startup (watch out the AutoUpdater is impacted as well, you may need to update manually!)

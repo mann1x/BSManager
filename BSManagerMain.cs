@@ -161,6 +161,7 @@ namespace BSManager
 
                 LogLine($"[BSMANAGER] STARTED ");
                 LogLine($"[BSMANAGER] Version: {_versionInfo}");
+                OpenXRRuntime.Log = LogLine;
 
                 FindRuntime();
 
@@ -1719,9 +1720,10 @@ namespace BSManager
                 {
                     if (!OpenXRToolStripMenuItem.Checked)
                     {
-                        if (!OpenXRRuntime.CanWrite())
+                        // Asks for administrator rights once (UAC); later switches run without prompts
+                        if (!OpenXRRuntime.EnsureCanSwitch())
                         {
-                            MessageBox.Show("Switching the OpenXR runtime changes HKLM\\SOFTWARE\\Khronos\\OpenXR\\1, which needs BSManager to run as administrator.",
+                            MessageBox.Show("The OpenXR switch needs administrator permission once, to be allowed to change the system OpenXR runtime.",
                                 "BSManager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                             return;
                         }
