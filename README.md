@@ -75,6 +75,8 @@ The immediate killing list (SIGTERM) is empty by default and can be customized u
 
 You can compile with Visual Studio 2019 and .NET Core 3.1.
 
+Branches, CI and the release process are described in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): changes go through pull requests into `dev`, releases are published from `master`.
+
 
 ## Changelog:
 
