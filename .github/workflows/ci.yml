@@ -1,0 +1,214 @@
+name: CI
+
+# Every push and PR: build the Windows single-file executable.
+# Pushes to dev publish a pre-release, pushes to master publish a release (only when the build passed).
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [master, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Never cancel a release in progress on dev/master; cancel superseded runs elsewhere
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/dev' }}
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+
+jobs:
+  build:
+    name: Build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The project has a COM reference (IWshRuntimeLibrary), which only the Visual Studio MSBuild can resolve
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Build and publish self-contained single file
+        shell: pwsh
+        run: |
+          msbuild BSManager.csproj -restore -t:Publish -m -nologo -v:minimal `
+            -p:Configuration=Release -p:Platform=x64 `
+            -p:RuntimeIdentifier=win10-x64 -p:SelfContained=true `
+            -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:DebugType=None `
+            -p:PublishDir="$PWD\out\"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item out\BSManager.exe dist\BSManager.exe
+          # The auto-updater downloads BSManager.zip and extracts it next to the running executable
+          Compress-Archive -Path dist\BSManager.exe -DestinationPath dist\BSManager.zip
+          Get-ChildItem dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: BSManager
+          path: dist/*
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------------------------
+  # Releases: dev -> pre-release v<next>-dev.<run>, master -> release v<Version> (once per version)
+  # ---------------------------------------------------------------------------------------------
+  release-plan:
+    name: Release plan
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev')
+    needs: [build]
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+      prerelease: ${{ steps.plan.outputs.prerelease }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Plan
+        id: plan
+        run: |
+          version=$(grep -oP '<Version>\K[0-9]+\.[0-9]+\.[0-9]+(?=</Version>)' BSManager.csproj)
+          [ -n "$version" ] || { echo "::error::<Version> not found in BSManager.csproj"; exit 1; }
+          released=false
+          gh release view "v$version" >/dev/null 2>&1 && released=true
+
+          if [ "$GITHUB_REF" = "refs/heads/master" ]; then
+            if [ "$released" = true ]; then
+              echo "::notice::v$version is already released; bump <Version> to publish a new release"
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            tag="v$version"; prerelease=false
+          else
+            # Pre-releases target the next version once the current one has been released
+            next="$version"
+            if [ "$released" = true ]; then
+              IFS=. read -r ma mi pa <<< "$version"; next="$ma.$mi.$((pa + 1))"
+            fi
+            tag="v$next-dev.${GITHUB_RUN_NUMBER}"; prerelease=true
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "Release plan: $tag (prerelease=$prerelease)" >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish ${{ needs.release-plan.outputs.tag }}
+    needs: [release-plan, build]
+    if: needs.release-plan.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.release-plan.outputs.tag }}
+      VERSION: ${{ needs.release-plan.outputs.version }}
+      PRERELEASE: ${{ needs.release-plan.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: BSManager
+          path: dist
+
+      - name: Release notes
+        run: |
+          # Changelog entry "- vX.Y.Z" in README.md, up to the next version entry
+          awk -v v="- v$VERSION" '
+            { sub(/\r$/, "") }
+            /^## Changelog/ { in_log = 1; next }
+            in_log && /^## / { exit }
+            in_log && $0 ~ "^" v "[[:space:]]*$" { grab = 1; next }
+            grab && /^- v[0-9]+\.[0-9]+\.[0-9]+/ { exit }
+            grab { sub(/^    /, ""); print }
+          ' README.md > notes.md
+          if [ "$PRERELEASE" = true ]; then
+            { echo "Development build of \`dev\` at ${GITHUB_SHA::7}. Not a stable release."; echo; cat notes.md; } > notes.tmp && mv notes.tmp notes.md
+          fi
+          [ -s notes.md ] || echo "See the commit history for changes." > notes.md
+          cat >> notes.md <<'EOF'
+
+          ## Downloads
+          - **BSManager.zip** — Windows x64 self-contained executable, zipped (used by the auto-updater)
+          - **BSManager.exe** — the same executable, not zipped
+          EOF
+
+      - name: Create release
+        run: |
+          flags=(--target "$GITHUB_SHA" --title "BSManager $TAG" --notes-file notes.md)
+          if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); else flags+=(--latest); fi
+          gh release create "$TAG" "${flags[@]}" dist/BSManager.zip dist/BSManager.exe
+
+      # Releases only: installed copies read BSManager/AutoUpdaterBSManager.json from master, so offer them the
+      # new version through a PR into master (merging it publishes nothing, the version is already released).
+      # Needs Settings -> Actions -> General -> "Allow GitHub Actions to create and approve pull requests".
+      - name: Open auto-updater PR
+        if: env.PRERELEASE != 'true'
+        continue-on-error: true
+        run: |
+          sum=$(sha256sum dist/BSManager.zip | cut -d' ' -f1 | tr 'a-f' 'A-F')
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$TAG/BSManager.zip"
+          file=BSManager/AutoUpdaterBSManager.json
+          jq --arg v "$VERSION" --arg url "$url" --arg sum "$sum" \
+            '.version = $v | .url = $url | .checksum.value = $sum' "$file" > updater.json
+          mv updater.json "$file"
+          branch="release/autoupdater-$TAG"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "Auto-updater: offer $TAG"
+          git push origin "$branch"
+          if ! gh pr create --base master --head "$branch" --title "Auto-updater: offer $TAG" \
+               --body "Points installed copies at the $TAG release (\`BSManager.zip\`, SHA-256 \`$sum\`). Merge after checking the release."; then
+            echo "::warning::Could not open the auto-updater PR; branch $branch is pushed, open the PR into master by hand"
+            exit 1
+          fi
+
+      # Releases only (never dev pre-releases). A Discord failure is reported but does not undo the release.
+      - name: Announce on Discord
+        if: env.PRERELEASE != 'true'
+        continue-on-error: true
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.TECH_CORNER_DISCOWH }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "::warning::Secret TECH_CORNER_DISCOWH is not set; skipping the Discord announcement"
+            exit 0
+          fi
+          python3 - <<'PY' > discord.json
+          import json, os
+          tag = os.environ["TAG"]
+          url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/releases/tag/{tag}"
+          notes = open("notes.md", encoding="utf-8").read().strip()
+          limit = 3800  # Discord embed descriptions are limited to 4096 characters
+          if len(notes) > limit:
+              notes = notes[:limit].rsplit("\n", 1)[0] + f"\n\n… [full release notes]({url})"
+          print(json.dumps({
+              "username": "BSManager",
+              "embeds": [{
+                  "title": f"BSManager {tag} released",
+                  "url": url,
+                  "description": notes,
+                  "color": 0x58B9FF,
+              }],
+          }))
+          PY
+          curl -fsS --retry 3 -H "Content-Type: application/json" -d @discord.json "$DISCORD_WEBHOOK"
+          echo "Announced $TAG on Discord" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prune old dev pre-releases (keep 10)
+        if: env.PRERELEASE == 'true'
+        run: |
+          gh release list --limit 200 --json tagName,isPrerelease,createdAt \
+            --jq '[.[] | select(.isPrerelease and (.tagName | test("-dev\\.[0-9]+$")))] | sort_by(.createdAt) | reverse | .[10:] | .[].tagName' \
+          | while read -r t; do gh release delete "$t" --yes --cleanup-tag; done
