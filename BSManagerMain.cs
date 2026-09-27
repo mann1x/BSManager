@@ -112,6 +112,7 @@ namespace BSManager
 
         private static bool debugLog = false;
         private static bool ManageRuntime = false;
+        private static bool OpenXRSwitch = false;
         private static string RuntimePath = "";
         private static bool LastManage = false;
         private static bool ShowProgressToast = true;
@@ -200,6 +201,19 @@ namespace BSManager
                         RuntimeToolStripMenuItem.Checked = true;
                         ManageRuntime = true;
                         LogLine($"[BSMANAGER] Manage Runtime enabled");
+                    }
+
+                    if (registrySettings.GetValue("OpenXRSwitch") == null)
+                    {
+                        OpenXRToolStripMenuItem.Checked = false;
+                        OpenXRSwitch = false;
+                        LogLine($"[BSMANAGER] OpenXR runtime switch disabled");
+                    }
+                    else
+                    {
+                        OpenXRToolStripMenuItem.Checked = true;
+                        OpenXRSwitch = true;
+                        LogLine($"[BSMANAGER] OpenXR runtime switch enabled");
                     }
 
                     if (registrySettings.GetValue("ShowProgressToast") == null)
@@ -656,6 +670,7 @@ namespace BSManager
                     ChangeHMDStrip($" {_hmd} {action} ", true);
                     this.notifyIcon1.Icon = BSManagerRes.bsmanager_on;
                     HeadSetState = true;
+                    if (OpenXRSwitch) OpenXRRuntime.SwitchToSteamVR();
                     Task.Delay(TimeSpan.FromMilliseconds(5000))
                         .ContinueWith(task => checkLHState(lh => !lh.PoweredOn, true));
                     LogLine($"[HMD] Runtime {action}: ManageRuntime is {ManageRuntime}");
@@ -697,6 +712,7 @@ namespace BSManager
                     ChangeHMDStrip($" {_hmd} {action} ", false);
                     this.notifyIcon1.Icon = BSManagerRes.bsmanager_off;
                     HeadSetState = false;
+                    if (OpenXRSwitch) OpenXRRuntime.Restore();
                     Task.Delay(TimeSpan.FromMilliseconds(5000))
                         .ContinueWith(task => checkLHState(lh => lh.PoweredOn, false));
                     LogLine($"[HMD] Runtime {action}: ManageRuntime is {ManageRuntime}");
@@ -1695,6 +1711,40 @@ namespace BSManager
             }
 
         }
+        private void OpenXRToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                using (RegistryKey registrySettings = Registry.CurrentUser.OpenSubKey("SOFTWARE\\ManniX\\BSManager", true))
+                {
+                    if (!OpenXRToolStripMenuItem.Checked)
+                    {
+                        if (!OpenXRRuntime.CanWrite())
+                        {
+                            MessageBox.Show("Switching the OpenXR runtime changes HKLM\\SOFTWARE\\Khronos\\OpenXR\\1, which needs BSManager to run as administrator.",
+                                "BSManager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                        OpenXRSwitch = true;
+                        registrySettings.SetValue("OpenXRSwitch", "1");
+                        OpenXRToolStripMenuItem.Checked = true;
+                        if (HeadSetState) OpenXRRuntime.SwitchToSteamVR();
+                    }
+                    else
+                    {
+                        OpenXRSwitch = false;
+                        registrySettings.DeleteValue("OpenXRSwitch", false);
+                        OpenXRToolStripMenuItem.Checked = false;
+                        OpenXRRuntime.Restore();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                HandleEx(ex);
+            }
+        }
+
         public new void Dispose()
         {
             ProcessLHtimer.Enabled = false;
