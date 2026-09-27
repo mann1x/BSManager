@@ -624,16 +624,30 @@ namespace BSManager
             }
         }
 
+        // USB device IDs of the supported headsets; one list for both power on and power off
+        private static readonly (string Id, string Name)[] HmdDevices =
+        {
+            ("VID_0483&PID_0101", "PIMAX HMD"),
+            ("VID_2996&PID_0309", "VIVE PRO HMD"),
+            ("VID_0BB4&PID_0313", "VIVE COSMOS HMD"),
+            ("VID_17E9&PID_6101", "VIVE WIRELESS ADAPTER"),
+        };
+
+        private static string HmdName(string did)
+        {
+            foreach (var (id, name) in HmdDevices)
+            {
+                if (did.Contains(id)) return name;
+            }
+            return "";
+        }
+
         private void CheckHMDOn(string did)
         {
             try
             {
-                string _hmd = "";
                 string action = "ON";
-
-                if (did.Contains("VID_0483&PID_0101")) _hmd = "PIMAX HMD";
-                if (did.Contains("VID_2996&PID_0309")) _hmd = "VIVE PRO HMD";
-                if (did.Contains("VID_0BB4&PID_0313")) _hmd = "VIVE COSMOS HMD";
+                string _hmd = HmdName(did);
 
                 if (_hmd.Length > 0)
                 {
@@ -673,12 +687,8 @@ namespace BSManager
         {
             try
             {
-                string _hmd = "";
                 string action = "OFF";
-
-                if (did.Contains("VID_0483&PID_0101")) _hmd = "PIMAX HMD";
-                if (did.Contains("VID_2996&PID_0309")) _hmd = "VIVE PRO HMD";
-                if (did.Contains("VID_0BB4&PID_0313")) _hmd = "VIVE COSMOS HMD";
+                string _hmd = HmdName(did);
 
                 if (_hmd.Length > 0)
                 {
