@@ -1,9 +1,9 @@
 ﻿# BSManager
 
 
-BSManager is a small portable utility to switch automatically on and off the Vive Base Stations with the VR Headset.
+BSManager is a small utility to switch automatically on and off the Vive Base Stations with the VR Headset.
 
-It does support all Pimax models and the Vive Pro headsets.
+It does support all Pimax models, the Vive Pro and Vive Cosmos headsets and the Vive Wireless Adapter.
 
 Base Stations v1 and v2 are both supported.
 
@@ -50,6 +50,8 @@ Only for the BS v1 the Stations will be briefly powered on, about 30 seconds, to
 
 BSManager can automatically start & kill Pimax Runtime & close selected SteamVR components (which reduces risk of SteamVR crashes).
 
+BSManager can also make SteamVR the OpenXR runtime while the headset is on: enable "OpenXR to SteamVR" in the System Tray Icon drop-down menu. When the headset goes off the runtime that was active before (Oculus, WMR, ...) is restored. Windows keeps the active OpenXR runtime in HKLM, so this option needs BSManager to run as Administrator.
+
 Manage Runtime is an option that can be enabled in the System Tray Icon drop-down menu; it can be enabled if the Pimax Runtime is not in the default directory running only once BSManager with Admin privileges.
 
 With Manage Runtime enabled Pitool is automatically open and closed. The process will start about 15 seconds after the HMD has changed state to allow reboots (HMD reboot, Pimax service restart or manual on/off) without disruptions.
@@ -69,6 +71,7 @@ The immediate killing list (SIGTERM) is empty by default and can be customized u
     - The excellent BLEConsole from SeNSSoFT [https://github.com/sensboston/BLEConsole]
     - LightHouseController from Alex Flynn [https://bitbucket.org/Flynny75/lighthousecontroller/src/master/]
     - SparkerInVR's great support in testing [https://www.twitch.tv/sparkerinvr]
+    - Contributors: drowhunter (startup fix, Vive Wireless Adapter and the OpenXR runtime switch idea), zra123 (Vive Cosmos support), glazkovalex (the first .NET 8 port)
 
 
 ## Compilation
@@ -83,6 +86,9 @@ Branches, CI and the release process are described in [docs/DEVELOPMENT.md](docs
 - v2.5.0
     - New: Moved from .NET Core 3.1 to .NET 10 (smaller self-contained executable, about 100 MB instead of 160 MB)
     - New: Installer (`BSManager-setup.exe`), per user or for all users, with desktop icon and Run at logon options
+    - New: Support for the Vive Cosmos (thanks zra123) and the Vive Wireless Adapter (thanks drowhunter)
+    - New: Optional "OpenXR to SteamVR": SteamVR is the OpenXR runtime while the headset is on, the previous runtime is restored when it goes off (needs Administrator; idea by drowhunter)
+    - Fix: Startup error when Run at Startup was never enabled, which skipped the rest of the initialization (thanks drowhunter)
 - v2.4.1
     - Fix: Bug in Run at Startup (watch out the AutoUpdater is impacted as well, you may need to update manually!)
 - v2.4.0

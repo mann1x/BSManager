@@ -40,6 +40,13 @@ Single file, self-contained, ReadyToRun and compression are set in `BSManager.cs
 iscc /DAppVersion=2.5.0 /DSourceExe=$PWD\out\BSManager.exe /Oout installer\BSManager.iss
 ```
 
+## Code map
+
+- `BSManagerMain.cs`: tray menu, settings (`HKCU\SOFTWARE\ManniX\BSManager`), headset detection over WMI USB events, base station control, Manage Runtime.
+- Supported headsets are the `HmdDevices` table (USB `VID_xxxx&PID_xxxx` → name): one entry covers both power on and power off.
+- `OpenXRRuntime.cs`: the optional "OpenXR to SteamVR" switch (HKLM `SOFTWARE\Khronos\OpenXR\1`, needs administrator; the previous runtime is kept in the settings as `OpenXRPreviousRuntime` until restored).
+- `LightHouse.cs`, `BLEHelper.cs`: base stations and BLE commands.
+
 ## CI
 
 | Workflow | Trigger | What it does |
