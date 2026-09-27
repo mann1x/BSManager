@@ -16,16 +16,15 @@ using Microsoft.Win32;
 using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using IWshRuntimeLibrary;
 using AutoUpdaterDotNET;
 using System.Runtime.Serialization;
 using System.Timers;
 using System.ServiceProcess;
 using File = System.IO.File;
+using MethodInvoker = System.Windows.Forms.MethodInvoker;
 using System.Text;
 using Microsoft.Toolkit.Uwp.Notifications;
 using System.IO.Packaging;
-using NUnit.Framework;
 using System.Globalization;
 
 namespace BSManager
@@ -113,6 +112,7 @@ namespace BSManager
 
         private static bool debugLog = false;
         private static bool ManageRuntime = false;
+        private static bool OpenXRSwitch = false;
         private static string RuntimePath = "";
         private static bool LastManage = false;
         private static bool ShowProgressToast = true;
@@ -203,6 +203,19 @@ namespace BSManager
                         LogLine($"[BSMANAGER] Manage Runtime enabled");
                     }
 
+                    if (registrySettings.GetValue("OpenXRSwitch") == null)
+                    {
+                        OpenXRToolStripMenuItem.Checked = false;
+                        OpenXRSwitch = false;
+                        LogLine($"[BSMANAGER] OpenXR runtime switch disabled");
+                    }
+                    else
+                    {
+                        OpenXRToolStripMenuItem.Checked = true;
+                        OpenXRSwitch = true;
+                        LogLine($"[BSMANAGER] OpenXR runtime switch enabled");
+                    }
+
                     if (registrySettings.GetValue("ShowProgressToast") == null)
                     {
                         disableProgressToastToolStripMenuItem.Checked = true;
@@ -231,7 +244,7 @@ namespace BSManager
 
                 using (RegistryKey registryStart = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true))
                 {
-                    string _curpath = registryStart.GetValue("BSManager").ToString();
+                    string _curpath = registryStart?.GetValue("BSManager")?.ToString();
                     if (_curpath == null)
                     {
                         toolStripRunAtStartup.Checked = false;
@@ -324,7 +337,8 @@ namespace BSManager
                 const string scheme = "pack";
                 if (!UriParser.IsKnownScheme(scheme))
                 {
-                    Assert.That(PackUriHelper.UriSchemePack, Is.EqualTo(scheme));
+                    // Reading UriSchemePack registers the pack:// scheme
+                    _ = PackUriHelper.UriSchemePack;
                 }
 
                 // Listen to notification activation
@@ -624,15 +638,30 @@ namespace BSManager
             }
         }
 
+        // USB device IDs of the supported headsets; one list for both power on and power off
+        private static readonly (string Id, string Name)[] HmdDevices =
+        {
+            ("VID_0483&PID_0101", "PIMAX HMD"),
+            ("VID_2996&PID_0309", "VIVE PRO HMD"),
+            ("VID_0BB4&PID_0313", "VIVE COSMOS HMD"),
+            ("VID_17E9&PID_6101", "VIVE WIRELESS ADAPTER"),
+        };
+
+        private static string HmdName(string did)
+        {
+            foreach (var (id, name) in HmdDevices)
+            {
+                if (did.Contains(id)) return name;
+            }
+            return "";
+        }
+
         private void CheckHMDOn(string did)
         {
             try
             {
-                string _hmd = "";
                 string action = "ON";
-
-                if (did.Contains("VID_0483&PID_0101")) _hmd = "PIMAX HMD";
-                if (did.Contains("VID_2996&PID_0309")) _hmd = "VIVE PRO HMD";
+                string _hmd = HmdName(did);
 
                 if (_hmd.Length > 0)
                 {
@@ -641,6 +670,7 @@ namespace BSManager
                     ChangeHMDStrip($" {_hmd} {action} ", true);
                     this.notifyIcon1.Icon = BSManagerRes.bsmanager_on;
                     HeadSetState = true;
+                    if (OpenXRSwitch) OpenXRRuntime.SwitchToSteamVR();
                     Task.Delay(TimeSpan.FromMilliseconds(5000))
                         .ContinueWith(task => checkLHState(lh => !lh.PoweredOn, true));
                     LogLine($"[HMD] Runtime {action}: ManageRuntime is {ManageRuntime}");
@@ -672,11 +702,8 @@ namespace BSManager
         {
             try
             {
-                string _hmd = "";
                 string action = "OFF";
-
-                if (did.Contains("VID_0483&PID_0101")) _hmd = "PIMAX HMD";
-                if (did.Contains("VID_2996&PID_0309")) _hmd = "VIVE PRO HMD";
+                string _hmd = HmdName(did);
 
                 if (_hmd.Length > 0)
                 {
@@ -685,6 +712,7 @@ namespace BSManager
                     ChangeHMDStrip($" {_hmd} {action} ", false);
                     this.notifyIcon1.Icon = BSManagerRes.bsmanager_off;
                     HeadSetState = false;
+                    if (OpenXRSwitch) OpenXRRuntime.Restore();
                     Task.Delay(TimeSpan.FromMilliseconds(5000))
                         .ContinueWith(task => checkLHState(lh => lh.PoweredOn, false));
                     LogLine($"[HMD] Runtime {action}: ManageRuntime is {ManageRuntime}");
@@ -1486,10 +1514,10 @@ namespace BSManager
         private void createDesktopShortcutToolStripMenuItem_Click(object sender, EventArgs e)
         {
             try {
-                object shDesktop = (object)"Desktop";
-                WshShell shell = new WshShell();
-                string shortcutAddress = (string)shell.SpecialFolders.Item(ref shDesktop) + @"\BSManager.lnk";
-                IWshShortcut shortcut = (IWshShortcut)shell.CreateShortcut(shortcutAddress);
+                // WScript.Shell through late binding: no COM interop assembly to generate at build time
+                dynamic shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
+                string shortcutAddress = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "BSManager.lnk");
+                dynamic shortcut = shell.CreateShortcut(shortcutAddress);
                 shortcut.Description = "Open BSManager";
                 shortcut.Hotkey = "";
                 shortcut.TargetPath = MyExecutableWithPath;
@@ -1683,6 +1711,40 @@ namespace BSManager
             }
 
         }
+        private void OpenXRToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                using (RegistryKey registrySettings = Registry.CurrentUser.OpenSubKey("SOFTWARE\\ManniX\\BSManager", true))
+                {
+                    if (!OpenXRToolStripMenuItem.Checked)
+                    {
+                        if (!OpenXRRuntime.CanWrite())
+                        {
+                            MessageBox.Show("Switching the OpenXR runtime changes HKLM\\SOFTWARE\\Khronos\\OpenXR\\1, which needs BSManager to run as administrator.",
+                                "BSManager", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                        OpenXRSwitch = true;
+                        registrySettings.SetValue("OpenXRSwitch", "1");
+                        OpenXRToolStripMenuItem.Checked = true;
+                        if (HeadSetState) OpenXRRuntime.SwitchToSteamVR();
+                    }
+                    else
+                    {
+                        OpenXRSwitch = false;
+                        registrySettings.DeleteValue("OpenXRSwitch", false);
+                        OpenXRToolStripMenuItem.Checked = false;
+                        OpenXRRuntime.Restore();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                HandleEx(ex);
+            }
+        }
+
         public new void Dispose()
         {
             ProcessLHtimer.Enabled = false;
