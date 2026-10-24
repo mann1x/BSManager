@@ -41,6 +41,7 @@ namespace BSManager
             this.ToolStripMenuItemHmd = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripRunAtStartup = new System.Windows.Forms.ToolStripMenuItem();
             this.RuntimeToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.OpenXRToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripMenuItem4 = new System.Windows.Forms.ToolStripMenuItem();
             this.bSManagerVersionToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripDebugLog = new System.Windows.Forms.ToolStripMenuItem();
@@ -72,10 +73,11 @@ namespace BSManager
             this.hMDToolStripMenuItem,
             this.toolStripRunAtStartup,
             this.RuntimeToolStripMenuItem,
+            this.OpenXRToolStripMenuItem,
             this.toolStripMenuItem4,
             this.quitToolStripMenuItem});
             this.contextMenuStrip1.Name = "contextMenuStrip1";
-            this.contextMenuStrip1.Size = new System.Drawing.Size(181, 158);
+            this.contextMenuStrip1.Size = new System.Drawing.Size(181, 180);
             // 
             // toolStripMenuItemBS
             // 
@@ -118,6 +120,14 @@ namespace BSManager
             this.RuntimeToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
             this.RuntimeToolStripMenuItem.Text = "Manage Runtime";
             this.RuntimeToolStripMenuItem.Click += new System.EventHandler(this.RuntimeToolStripMenuItem_Click);
+            // 
+            // OpenXRToolStripMenuItem
+            // 
+            this.OpenXRToolStripMenuItem.Name = "OpenXRToolStripMenuItem";
+            this.OpenXRToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.OpenXRToolStripMenuItem.Text = "OpenXR to SteamVR";
+            this.OpenXRToolStripMenuItem.ToolTipText = "Make SteamVR the OpenXR runtime while the headset is on, restore the previous one when it goes off (needs administrator)";
+            this.OpenXRToolStripMenuItem.Click += new System.EventHandler(this.OpenXRToolStripMenuItem_Click);
             // 
             // toolStripMenuItem4
             // 
@@ -246,6 +256,7 @@ namespace BSManager
         private ToolStripMenuItem toolStripDebugLog;
         private ToolStripMenuItem quitToolStripMenuItem;
         private ToolStripMenuItem RuntimeToolStripMenuItem;
+        private ToolStripMenuItem OpenXRToolStripMenuItem;
         private ToolStripMenuItem SteamVR_LH_ToolStripMenuItem;
         private ToolStripMenuItem SteamVR_DB_ToolStripMenuItem;
         private ToolStripMenuItem disableProgressToastToolStripMenuItem;

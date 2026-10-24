@@ -13,10 +13,15 @@ namespace BSManager
         /// <summary>
         ///  The main entry point for the application.
         /// </summary>
-        static Mutex mutex = new Mutex(true, "{67489549-940B-48FF-9B6E-70D31B4C6E71}");
+        static Mutex mutex;
         [STAThread]
-        static void Main()
+        static int Main(string[] args)
         {
+            // Elevated helper modes of the OpenXR runtime switch: no tray app, no single-instance check
+            if (args.Length >= 1 && args[0] == OpenXRRuntime.ApplyArg) return OpenXRRuntime.ApplyFromTask();
+            if (args.Length >= 2 && args[0] == OpenXRRuntime.RegisterTaskArg) return OpenXRRuntime.RegisterTask(args[1]);
+
+            mutex = new Mutex(true, "{67489549-940B-48FF-9B6E-70D31B4C6E71}");
             if (mutex.WaitOne(TimeSpan.Zero, true))
             {
                 Application.SetHighDpiMode(HighDpiMode.SystemAware);
@@ -28,6 +33,7 @@ namespace BSManager
             } else {
                 Application.Exit();
             }
+            return 0;
         }
 
     }
