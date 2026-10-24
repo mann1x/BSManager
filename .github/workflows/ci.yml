@@ -163,10 +163,14 @@ jobs:
 
       # Releases only: installed copies read BSManager/AutoUpdaterBSManager.json from master, so offer them the
       # new version through a PR into master (merging it publishes nothing, the version is already released).
-      # Needs Settings -> Actions -> General -> "Allow GitHub Actions to create and approve pull requests".
+      # With the BUMP_TOKEN secret (a token that can push and open PRs) the PR runs CI like any other and is set to
+      # auto-merge once Build passes; with only GITHUB_TOKEN its CI waits for approval and it is merged by hand, and
+      # Settings -> Actions -> General -> "Allow GitHub Actions to create and approve pull requests" is needed.
       - name: Open auto-updater PR
         if: env.PRERELEASE != 'true'
         continue-on-error: true
+        env:
+          BUMP_TOKEN: ${{ secrets.BUMP_TOKEN }}
         run: |
           sum=$(sha256sum dist/BSManager.zip | cut -d' ' -f1 | tr 'a-f' 'A-F')
           url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$TAG/BSManager.zip"
@@ -179,11 +183,20 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
           git commit -am "Auto-updater: offer $TAG"
+          if [ -n "$BUMP_TOKEN" ]; then
+            # Push and open the PR as the token's owner, so CI runs on it without approval
+            export GH_TOKEN="$BUMP_TOKEN"
+            git config --unset-all http.https://github.com/.extraheader || true
+            git remote set-url origin "https://x-access-token:$BUMP_TOKEN@${GITHUB_SERVER_URL#https://}/$GITHUB_REPOSITORY"
+          fi
           git push origin "$branch"
           if ! gh pr create --base master --head "$branch" --title "Auto-updater: offer $TAG" \
                --body "Points installed copies at the $TAG release (\`BSManager.zip\`, SHA-256 \`$sum\`). Merge after checking the release."; then
             echo "::warning::Could not open the auto-updater PR; branch $branch is pushed, open the PR into master by hand"
             exit 1
+          fi
+          if [ -n "$BUMP_TOKEN" ] && ! gh pr merge "$branch" --auto --merge; then
+            echo "::warning::Could not enable auto-merge on the auto-updater PR; merge it by hand"
           fi
 
       # Releases only (never dev pre-releases). A Discord failure is reported but does not undo the release.
