@@ -3,7 +3,9 @@
 
 BSManager is a small utility to switch automatically on and off the Vive Base Stations with the VR Headset.
 
-It does support all Pimax models, the Vive Pro and Vive Cosmos headsets and the Vive Wireless Adapter.
+It does support all Pimax models, the original Vive, Vive Pro, Vive Pro 2, Vive Cosmos and Bigscreen Beyond headsets and the Vive Wireless Adapter.
+
+If your headset is not detected, enable the Debug Log and look for the `[USB Discovery] DID=` lines in BSManager.log with the headset on: open an issue with them and it can be added.
 
 Base Stations v1 and v2 are both supported.
 
@@ -48,6 +50,8 @@ Only for the BS v2 if the last issued command is Sleep and the Base Stations are
 
 Only for the BS v1 the Stations will be briefly powered on, about 30 seconds, to set the Sleep mode (they don't report the power state).
 
+The Base Stations can also be controlled by hand from the "Base Stations" menu, for example to use the headset in inside-out (SLAM) tracking mode with the stations off: "Wake up now" and "Standby now" switch all the stations on or off and stop following the HMD. The choice is kept across restarts. Check "Follow HMD" again to go back to automatic control.
+
 BSManager can automatically start & kill Pimax Runtime & close selected SteamVR components (which reduces risk of SteamVR crashes).
 
 BSManager can also make SteamVR the OpenXR runtime while the headset is on: enable "OpenXR to SteamVR" in the System Tray Icon drop-down menu. When the headset goes off the runtime that was active before (Oculus, WMR, ...) is restored. Windows keeps the active OpenXR runtime in HKLM, so enabling the option asks once for administrator permission (UAC): BSManager registers a scheduled task that makes the switches from then on without further prompts. Only runtimes registered with OpenXR (Oculus, SteamVR, WMR, ...) can be selected.
@@ -83,6 +87,9 @@ Branches, CI and the release process are described in [docs/DEVELOPMENT.md](docs
 
 ## Changelog:
 
+- v2.5.1
+    - New: Manual Base Stations control from the "Base Stations" menu: "Wake up now" and "Standby now" switch all the stations on or off and stop following the HMD (kept across restarts), "Follow HMD" goes back to automatic (thanks gildahl for the request)
+    - New: Detection of the original HTC Vive, Vive Pro 2 and Bigscreen Beyond (not tested on hardware yet, please report)
 - v2.5.0
     - New: Moved from .NET Core 3.1 to .NET 10 (smaller self-contained executable, about 100 MB instead of 160 MB)
     - New: Installer (`BSManager-setup.exe`), per user or for all users, with desktop icon and Run at logon options

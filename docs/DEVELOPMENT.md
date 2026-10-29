@@ -66,7 +66,7 @@ Assets: `BSManager-setup.exe` (installer), `BSManager.zip` (the executable, zipp
 
 ### Auto-updater
 
-Installed copies check `BSManager/AutoUpdaterBSManager.json` on `master` (raw.githubusercontent.com). After publishing a release, CI opens a PR into `master` that sets `version`, `url` and the SHA-256 `checksum` of the new `BSManager.zip`. Merging that PR is what offers the update to users (it publishes nothing, the version is already released). This needs Settings → Actions → General → *Allow GitHub Actions to create and approve pull requests*; without it CI pushes the branch `release/autoupdater-v<Version>` and warns, and the PR is opened by hand.
+Installed copies check `BSManager/AutoUpdaterBSManager.json` on `master` (raw.githubusercontent.com). After publishing a release, CI opens a PR into `master` that sets `version`, `url` and the SHA-256 `checksum` of the new `BSManager.zip`. Merging that PR is what offers the update to users (it publishes nothing, the version is already released). With the `BUMP_TOKEN` Actions secret (a token that can push and open pull requests) CI opens the PR with it, so its own CI runs without approval, and enables auto-merge: it merges by itself once `Build` passes. Without `BUMP_TOKEN` the PR is opened with `GITHUB_TOKEN`: its CI run waits for approval, it is merged by hand, and Settings → Actions → General → *Allow GitHub Actions to create and approve pull requests* is needed (without it CI pushes the branch `release/autoupdater-v<Version>` and warns, and the PR is opened by hand).
 
 Releases (not dev pre-releases) are announced on Discord through the webhook URL stored in the repository secret `TECH_CORNER_DISCOWH`. A missing secret or a Discord error is reported as a warning and never fails the release.
 
@@ -75,5 +75,5 @@ Release steps:
 2. Owner bumps `<Version>` in `BSManager.csproj` and completes the `- v<Version>` changelog entry in README.md (PR into `dev`).
 3. Try the latest dev pre-release with a headset and base stations: wake-up and sleep for v1 and v2 stations, HMD on/off detection, Manage Runtime, Run at Startup, tray menu.
 4. PR `dev` → `master`, merge commit. CI publishes release `v<Version>` and opens the auto-updater PR.
-5. Check the release, then merge the auto-updater PR.
+5. Check the release. The auto-updater PR merges by itself once `Build` passes (with `BUMP_TOKEN`), otherwise merge it by hand.
 6. Hotfix: branch `hotfix/*` from `master`, bump the patch version, PR into `master`, then merge `master` back into `dev`.
