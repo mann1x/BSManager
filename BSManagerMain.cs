@@ -87,6 +87,11 @@ namespace BSManager
 
         public bool HeadSetState = false;
 
+        // Manual control: when not following the HMD the Base Stations are kept in ManualState
+        private static bool AutoControl = true;
+        private static bool ManualState = false;
+        private bool StationsWanted => AutoControl ? HeadSetState : ManualState;
+
         private static int processingCmdSync = 0;
         private static int processingLHSync = 0;
 
@@ -202,6 +207,22 @@ namespace BSManager
                         RuntimeToolStripMenuItem.Checked = true;
                         ManageRuntime = true;
                         LogLine($"[BSMANAGER] Manage Runtime enabled");
+                    }
+
+                    object manualControl = registrySettings.GetValue("ManualControl");
+                    if (manualControl == null)
+                    {
+                        AutoControl = true;
+                        LogLine($"[BSMANAGER] Base Stations follow the HMD");
+                    }
+                    else
+                    {
+                        AutoControl = false;
+                        ManualState = manualControl.ToString() == "ON";
+                        AutoControlToolStripMenuItem.Checked = false;
+                        WakeUpNowToolStripMenuItem.Checked = ManualState;
+                        StandbyNowToolStripMenuItem.Checked = !ManualState;
+                        LogLine($"[BSMANAGER] Base Stations manual control, kept {(ManualState ? "ON" : "OFF")}");
                     }
 
                     if (registrySettings.GetValue("OpenXRSwitch") == null)
@@ -646,6 +667,10 @@ namespace BSManager
             ("VID_2996&PID_0309", "VIVE PRO HMD"),
             ("VID_0BB4&PID_0313", "VIVE COSMOS HMD"),
             ("VID_17E9&PID_6101", "VIVE WIRELESS ADAPTER"),
+            // IDs from Monado (vive_common.h, vp2_hid.h) and Valve's steam-devices udev rules
+            ("VID_0BB4&PID_2C87", "VIVE HMD"),
+            ("VID_0BB4&PID_0342", "VIVE PRO 2 HMD"),
+            ("VID_35BD&PID_0101", "BIGSCREEN BEYOND HMD"),
         };
 
         private static string HmdName(string did)
@@ -686,7 +711,7 @@ namespace BSManager
 
         private void checkLHState(Func<Lighthouse, bool> lighthousePredicate, bool hs_state)
         {
-            if (HeadSetState == hs_state) {
+            if (StationsWanted == hs_state) {
                 var results = _lighthouses.Where(lighthousePredicate);
                 if (results.Any())
                 {
@@ -812,7 +837,7 @@ namespace BSManager
             {
                 bool _done = true;
 
-                if (V2BaseStationsVive  && LastCmdSent == LastCmd.SLEEP && !HeadSetState)
+                if (V2BaseStationsVive  && LastCmdSent == LastCmd.SLEEP && !StationsWanted)
                 {
                     TimeSpan _delta = DateTime.Now - LastCmdStamp;
 
@@ -948,7 +973,7 @@ namespace BSManager
                 }
 
                 BeginInvoke((MethodInvoker)delegate {
-                    foreach (ToolStripMenuItem item in toolStripMenuItemBS.DropDownItems)
+                    foreach (ToolStripMenuItem item in toolStripMenuItemBS.DropDownItems.OfType<ToolStripMenuItem>())
                     {
                         if (item.Text.StartsWith(_name))
                         {
@@ -1172,7 +1197,7 @@ namespace BSManager
                     V2BaseStations = true;
                     existing.V2 = true;
 
-                    if (existing.V2PoweredOn && existing.LastCmd == LastCmd.SLEEP && !HeadSetState && existing.Manufacturer == BSManufacturer.VIVE)
+                    if (existing.V2PoweredOn && existing.LastCmd == LastCmd.SLEEP && !StationsWanted && existing.Manufacturer == BSManufacturer.VIVE)
                     {
                         TimeSpan _delta = DateTime.Now - existing.LastCmdStamp;
                         if (_delta.Minutes >= _V2DoubleCheckMin)
@@ -1198,7 +1223,7 @@ namespace BSManager
                 }
 
 
-                if (HeadSetState)
+                if (StationsWanted)
                 {
                     if (existing.V2 && (existing.LastCmd == LastCmd.NONE) && existing.PoweredOn)
                     {
@@ -1712,6 +1737,53 @@ namespace BSManager
             }
 
         }
+        private void SetBaseStationsControl(bool auto, bool state)
+        {
+            try
+            {
+                AutoControl = auto;
+                ManualState = state;
+                AutoControlToolStripMenuItem.Checked = auto;
+                WakeUpNowToolStripMenuItem.Checked = !auto && state;
+                StandbyNowToolStripMenuItem.Checked = !auto && !state;
+
+                using (RegistryKey registrySettings = Registry.CurrentUser.OpenSubKey("SOFTWARE\\ManniX\\BSManager", true))
+                {
+                    if (auto) registrySettings.DeleteValue("ManualControl", false);
+                    else registrySettings.SetValue("ManualControl", state ? "ON" : "OFF");
+                }
+
+                LogLine(auto ? "[BSMANAGER] Base Stations follow the HMD" : $"[BSMANAGER] Base Stations manual control, set {(state ? "ON" : "OFF")}");
+
+                // Let the BLE watcher bring every Base Station to the wanted state
+                if (SetProgressToast) ShowProgressToast = true;
+                foreach (Lighthouse lh in _lighthouses)
+                {
+                    lh.ProcessDone = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                HandleEx(ex);
+            }
+        }
+
+        private void AutoControlToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            // Unchecking keeps the Base Stations as the HMD wants them now
+            SetBaseStationsControl(!AutoControlToolStripMenuItem.Checked, HeadSetState);
+        }
+
+        private void WakeUpNowToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            SetBaseStationsControl(false, true);
+        }
+
+        private void StandbyNowToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            SetBaseStationsControl(false, false);
+        }
+
         private void OpenXRToolStripMenuItem_Click(object sender, EventArgs e)
         {
             try
