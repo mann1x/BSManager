@@ -87,6 +87,9 @@ Branches, CI and the release process are described in [docs/DEVELOPMENT.md](docs
 
 ## Changelog:
 
+- v2.5.1
+    - New: Manual Base Stations control from the "Base Stations" menu: "Wake up now" and "Standby now" switch all the stations on or off and stop following the HMD (kept across restarts), "Follow HMD" goes back to automatic (thanks gildahl for the request)
+    - New: Detection of the original HTC Vive, Vive Pro 2 and Bigscreen Beyond (not tested on hardware yet, please report)
 - v2.5.0
     - New: Moved from .NET Core 3.1 to .NET 10 (smaller self-contained executable, about 100 MB instead of 160 MB)
     - New: Installer (`BSManager-setup.exe`), per user or for all users, with desktop icon and Run at logon options
