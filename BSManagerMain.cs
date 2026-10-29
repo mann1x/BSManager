@@ -667,6 +667,10 @@ namespace BSManager
             ("VID_2996&PID_0309", "VIVE PRO HMD"),
             ("VID_0BB4&PID_0313", "VIVE COSMOS HMD"),
             ("VID_17E9&PID_6101", "VIVE WIRELESS ADAPTER"),
+            // IDs from Monado (vive_common.h, vp2_hid.h) and Valve's steam-devices udev rules
+            ("VID_0BB4&PID_2C87", "VIVE HMD"),
+            ("VID_0BB4&PID_0342", "VIVE PRO 2 HMD"),
+            ("VID_35BD&PID_0101", "BIGSCREEN BEYOND HMD"),
         };
 
         private static string HmdName(string did)

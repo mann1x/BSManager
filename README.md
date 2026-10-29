@@ -3,7 +3,9 @@
 
 BSManager is a small utility to switch automatically on and off the Vive Base Stations with the VR Headset.
 
-It does support all Pimax models, the Vive Pro and Vive Cosmos headsets and the Vive Wireless Adapter.
+It does support all Pimax models, the original Vive, Vive Pro, Vive Pro 2, Vive Cosmos and Bigscreen Beyond headsets and the Vive Wireless Adapter.
+
+If your headset is not detected, enable the Debug Log and look for the `[USB Discovery] DID=` lines in BSManager.log with the headset on: open an issue with them and it can be added.
 
 Base Stations v1 and v2 are both supported.
 
