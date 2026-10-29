@@ -37,6 +37,10 @@ namespace BSManager
             this.contextMenuStrip1 = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.toolStripMenuItemBS = new System.Windows.Forms.ToolStripMenuItem();
             this.ToolStripMenuItemDisco = new System.Windows.Forms.ToolStripMenuItem();
+            this.AutoControlToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.WakeUpNowToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.StandbyNowToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.toolStripSeparatorBS = new System.Windows.Forms.ToolStripSeparator();
             this.hMDToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.ToolStripMenuItemHmd = new System.Windows.Forms.ToolStripMenuItem();
             this.toolStripRunAtStartup = new System.Windows.Forms.ToolStripMenuItem();
@@ -82,6 +86,10 @@ namespace BSManager
             // toolStripMenuItemBS
             // 
             this.toolStripMenuItemBS.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.AutoControlToolStripMenuItem,
+            this.WakeUpNowToolStripMenuItem,
+            this.StandbyNowToolStripMenuItem,
+            this.toolStripSeparatorBS,
             this.ToolStripMenuItemDisco});
             this.toolStripMenuItemBS.Name = "toolStripMenuItemBS";
             this.toolStripMenuItemBS.Size = new System.Drawing.Size(180, 22);
@@ -92,6 +100,37 @@ namespace BSManager
             this.ToolStripMenuItemDisco.Name = "ToolStripMenuItemDisco";
             this.ToolStripMenuItemDisco.Size = new System.Drawing.Size(144, 22);
             this.ToolStripMenuItemDisco.Text = "Discovered: 0";
+            // 
+            // AutoControlToolStripMenuItem
+            // 
+            this.AutoControlToolStripMenuItem.Checked = true;
+            this.AutoControlToolStripMenuItem.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.AutoControlToolStripMenuItem.Name = "AutoControlToolStripMenuItem";
+            this.AutoControlToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.AutoControlToolStripMenuItem.Text = "Follow HMD";
+            this.AutoControlToolStripMenuItem.ToolTipText = "Wake up and put to sleep the Base Stations with the headset; uncheck to control them only by hand";
+            this.AutoControlToolStripMenuItem.Click += new System.EventHandler(this.AutoControlToolStripMenuItem_Click);
+            // 
+            // WakeUpNowToolStripMenuItem
+            // 
+            this.WakeUpNowToolStripMenuItem.Name = "WakeUpNowToolStripMenuItem";
+            this.WakeUpNowToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.WakeUpNowToolStripMenuItem.Text = "Wake up now";
+            this.WakeUpNowToolStripMenuItem.ToolTipText = "Wake up all the Base Stations and stop following the HMD";
+            this.WakeUpNowToolStripMenuItem.Click += new System.EventHandler(this.WakeUpNowToolStripMenuItem_Click);
+            // 
+            // StandbyNowToolStripMenuItem
+            // 
+            this.StandbyNowToolStripMenuItem.Name = "StandbyNowToolStripMenuItem";
+            this.StandbyNowToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.StandbyNowToolStripMenuItem.Text = "Standby now";
+            this.StandbyNowToolStripMenuItem.ToolTipText = "Put all the Base Stations to sleep and stop following the HMD";
+            this.StandbyNowToolStripMenuItem.Click += new System.EventHandler(this.StandbyNowToolStripMenuItem_Click);
+            // 
+            // toolStripSeparatorBS
+            // 
+            this.toolStripSeparatorBS.Name = "toolStripSeparatorBS";
+            this.toolStripSeparatorBS.Size = new System.Drawing.Size(177, 6);
             // 
             // hMDToolStripMenuItem
             // 
@@ -243,6 +282,10 @@ namespace BSManager
         private System.Windows.Forms.ContextMenuStrip contextMenuStrip1;
         private ToolStripMenuItem toolStripMenuItemBS;
         private ToolStripMenuItem ToolStripMenuItemDisco;
+        private ToolStripMenuItem AutoControlToolStripMenuItem;
+        private ToolStripMenuItem WakeUpNowToolStripMenuItem;
+        private ToolStripMenuItem StandbyNowToolStripMenuItem;
+        private ToolStripSeparator toolStripSeparatorBS;
         private ToolStripMenuItem hMDToolStripMenuItem;
         private ToolStripMenuItem ToolStripMenuItemHmd;
         private ToolStripMenuItem toolStripRunAtStartup;

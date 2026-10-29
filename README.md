@@ -48,6 +48,8 @@ Only for the BS v2 if the last issued command is Sleep and the Base Stations are
 
 Only for the BS v1 the Stations will be briefly powered on, about 30 seconds, to set the Sleep mode (they don't report the power state).
 
+The Base Stations can also be controlled by hand from the "Base Stations" menu, for example to use the headset in inside-out (SLAM) tracking mode with the stations off: "Wake up now" and "Standby now" switch all the stations on or off and stop following the HMD. The choice is kept across restarts. Check "Follow HMD" again to go back to automatic control.
+
 BSManager can automatically start & kill Pimax Runtime & close selected SteamVR components (which reduces risk of SteamVR crashes).
 
 BSManager can also make SteamVR the OpenXR runtime while the headset is on: enable "OpenXR to SteamVR" in the System Tray Icon drop-down menu. When the headset goes off the runtime that was active before (Oculus, WMR, ...) is restored. Windows keeps the active OpenXR runtime in HKLM, so enabling the option asks once for administrator permission (UAC): BSManager registers a scheduled task that makes the switches from then on without further prompts. Only runtimes registered with OpenXR (Oculus, SteamVR, WMR, ...) can be selected.
