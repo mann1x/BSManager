@@ -87,6 +87,8 @@ Branches, CI and the release process are described in [docs/DEVELOPMENT.md](docs
 
 ## Changelog:
 
+- v2.5.2
+    - Fix: Auto-updater download failed with "An exception occurred during a WebClient request" when BSManager is installed for all users (Program Files): the update is now downloaded to the temp folder and installed with an administrator prompt when needed. Copies already installed there must be updated manually once (or run BSManager as administrator and accept the update)
 - v2.5.1
     - New: Manual Base Stations control from the "Base Stations" menu: "Wake up now" and "Standby now" switch all the stations on or off and stop following the HMD (kept across restarts), "Follow HMD" goes back to automatic (thanks gildahl for the request)
     - New: Detection of the original HTC Vive, Vive Pro 2 and Bigscreen Beyond (not tested on hardware yet, please report)
