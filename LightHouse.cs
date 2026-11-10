@@ -13,6 +13,7 @@ namespace BSManager
         public int LastPowerState { get; set; }
         public int ErrorTotal { get; set; }
         public int OpsTotal { get; set; }
+        public int CmdAttempts { get; set; }
         public string ErrorStrings { get; set; }
 
         private LastCmd _lastCmd;
@@ -87,6 +88,7 @@ namespace BSManager
             ErrorStrings = "";
             ErrorTotal = 0;
             OpsTotal = 0;
+            CmdAttempts = 0;
         }
 
         public override bool Equals(object obj)

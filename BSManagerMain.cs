@@ -830,7 +830,7 @@ namespace BSManager
                     watcher.Stop();
                     Thread.Sleep(250);
                     LogLine($"[LightHouse] Stopped BLE Watcher Status: {watcher.Status}");
-                    ptoastNotificationList.Clear();
+                    RemoveProgressToast();
                 }
             }
         }
@@ -1297,14 +1297,19 @@ namespace BSManager
                 string ptag = "LHProcess";
                 string pgroup = "LHProcess";
                 
+                // The total is the number of Base Stations actually discovered, not bsCount:
+                // bsCount comes from the SteamVR/Pimax lighthousedb.json, which keeps every
+                // station ever paired (old or replaced ones too), so it can be larger.
+                int _totalCount = Math.Max(_lighthouses.Count, 1);
                 int _leftDone = 0;
                 foreach (Lighthouse lhDone in _lighthouses) {
-                    if (lhDone.ProcessDone) _leftDone++;
+                    if (lhDone.ProcessDone && lhDone != lh) _leftDone++;
                 }
 
                 lh.OpsTotal++;
+                lh.CmdAttempts++;
 
-                int _doneCount=_leftDone+1;
+                int _doneCount = Math.Min(_leftDone + 1, _totalCount);
 
                 var pcontent = new ToastContentBuilder()
                     .AddArgument("action", "viewConversation")
@@ -1319,8 +1324,10 @@ namespace BSManager
                         Status = new BindableString("progressStatus")
                     }).GetToastContent();
 
-                int eRate = (int)Math.Round((double)(100 * lh.ErrorTotal) / lh.OpsTotal);
-                bool showeRate = (eRate > 10) ? true : false;
+                // Show how many tries this command needed (failed BLE connections are retried
+                // on the next advertisement) instead of a lifetime error rate, which read as
+                // "[Errors 50%]" after a single failed try followed by a successful one.
+                int _attempt = lh.CmdAttempts;
                 string bsmanuf = "";
                 if (V2BaseStations)
                     bsmanuf = (lh.Manufacturer == BSManufacturer.HTC) ? " (by HTC)" : " (by VIVE)";
@@ -1334,10 +1341,11 @@ namespace BSManager
                     ptoast.Data = new Windows.UI.Notifications.NotificationData();
                     ptoast.Data.Values["title"] = $"BS {lh.Name}{bsmanuf}";
                     ptoast.Data.Values["progressValue"] = "0";
-                    ptoast.Data.Values["pregressCount"] = $"{_doneCount}/{bsCount}";
+                    ptoast.Data.Values["pregressCount"] = $"{_doneCount}/{_totalCount}";
                     ptoast.Data.Values["progressStatus"] = $"{_toastAction}... (0%)";
                     ptoast.Data.SequenceNumber = pidx;
                     ptoast.ExpirationTime = DateTime.Now.AddSeconds(120);
+                    ptoast.ExpiresOnReboot = true;
 
                     ptoastNotificationList.Add(ptoast);
                     if (ShowProgressToast) ToastNotificationManagerCompat.CreateToastNotifier().Show(ptoast);
@@ -1351,10 +1359,11 @@ namespace BSManager
                     };
                     initdata.Values["title"] = $"BS {lh.Name}{bsmanuf}";
                     initdata.Values["progressValue"] = $"0";
-                    initdata.Values["pregressCount"] = $"{_doneCount}/{bsCount}";
+                    initdata.Values["pregressCount"] = $"{_doneCount}/{_totalCount}";
                     initdata.Values["progressStatus"] = $"{_toastAction}... (0%)";
                     if (ShowProgressToast) ToastNotificationManagerCompat.CreateToastNotifier().Update(initdata, ptag, pgroup);
                 }
+                if (_attempt > 1) LogLine($"[{lh.Name}] Attempt {_attempt} for command {command} (lifetime errors {lh.ErrorTotal}/{lh.OpsTotal - 1})");
 
                 void updateProgress(double percentage, string _msg = "Commandeering")
                 {
@@ -1366,10 +1375,10 @@ namespace BSManager
                     };
                     double _p = percentage / 100;
                     string _status = $"{_toastAction}... ({percentage}%)";
-                    if (showeRate) _status += $" [Errors {eRate}%]";
+                    if (_attempt > 1) _status += $" [Attempt {_attempt}]";
                     data.Values["title"] = $"BS {lh.Name}{bsmanuf}";
                     data.Values["progressValue"] = $"{_p.ToString(progressdec)}";
-                    data.Values["pregressCount"] = $"{_doneCount}/{bsCount}";
+                    data.Values["pregressCount"] = $"{_doneCount}/{_totalCount}";
                     data.Values["progressStatus"] = _status;
                     if (ShowProgressToast) ToastNotificationManagerCompat.CreateToastNotifier().Update(data, _ptag, _pgroup);
                 }
@@ -1505,10 +1514,15 @@ namespace BSManager
                 lh.Action = Action.NONE;
 
                 lh.ProcessDone = true;
+                lh.CmdAttempts = 0;
 
                 ChangeBSMsg(lh.Name, lh.PoweredOn, lh.LastCmd, lh.Action);
 
                 lh.TooManyErrors = true;
+
+                // All the discovered stations got the command: take the progress toast out
+                // of the notification center instead of leaving it there.
+                if (_lighthouses.All(l => l.ProcessDone)) RemoveProgressToast();
 
                 Interlocked.Exchange(ref processingCmdSync, 0);
 
@@ -1531,6 +1545,21 @@ namespace BSManager
                 if (lh.TooManyErrors) BalloonMsg($"{lh.ErrorStrings}", $"[{lh.Name}] LAST ERRORS:");
                 ChangeBSMsg(lh.Name, lh.PoweredOn, lh.LastCmd, lh.Action);
                 Interlocked.Exchange(ref processingCmdSync, 0);
+            }
+        }
+
+        private void RemoveProgressToast()
+        {
+            try
+            {
+                if (ptoastNotificationList.Count == 0) return;
+                ptoastNotificationList.Clear();
+                ToastNotificationManagerCompat.History.Remove("LHProcess", "LHProcess");
+                LogLine("[LightHouse] Removed progress toast");
+            }
+            catch (Exception ex)
+            {
+                LogLine($"[LightHouse] Could not remove progress toast: {ex.Message}");
             }
         }
 
