@@ -256,8 +256,12 @@ namespace BSManager
 
                 AutoUpdater.ReportErrors = false;
                 AutoUpdater.InstalledVersion = new Version(_versionInfo);
-                AutoUpdater.DownloadPath = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
-                AutoUpdater.RunUpdateAsAdmin = false;
+                // Download into %TEMP%: the install folder may not be writable (an "all users" install
+                // lives under Program Files), and a failed write there surfaces as
+                // "WebException: An exception occurred during a WebClient request".
+                // Elevate the zip extractor only when the install folder needs it.
+                AutoUpdater.RunUpdateAsAdmin = !IsDirectoryWritable(Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName));
+                LogLine($"[BSMANAGER] Auto-updater: update runs as admin = {AutoUpdater.RunUpdateAsAdmin}");
                 AutoUpdater.Synchronous = true;
                 AutoUpdater.ParseUpdateInfoEvent += AutoUpdaterOnParseUpdateInfoEvent;
                 AutoUpdater.Start("https://raw.githubusercontent.com/mann1x/BSManager/master/BSManager/AutoUpdaterBSManager.json");
@@ -889,6 +893,20 @@ namespace BSManager
             ProcessLHtimer.Interval = ProcessLHtimerCycle;
             ProcessLHtimer.Elapsed += new ElapsedEventHandler(ProcessLH_ElapsedEventHandler);
             ProcessLHtimer.Start();
+        }
+
+        private static bool IsDirectoryWritable(string dir)
+        {
+            try
+            {
+                string probe = Path.Combine(dir, $".bsm-write-test-{Guid.NewGuid():N}.tmp");
+                using (new FileStream(probe, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.DeleteOnClose)) { }
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         private void AutoUpdaterOnParseUpdateInfoEvent(ParseUpdateInfoEventArgs args)
