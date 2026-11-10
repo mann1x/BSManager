@@ -87,6 +87,10 @@ Branches, CI and the release process are described in [docs/DEVELOPMENT.md](docs
 
 ## Changelog:
 
+- v2.5.3
+    - Fix: The "Commandeering the Base Stations" toast counted every station ever paired in the SteamVR/Pimax database (e.g. 2/4 with two stations), now it counts the stations found nearby
+    - Fix: The toast showed a misleading "[Errors 50%]" after one failed try followed by a successful one, now it shows "[Attempt N]" when a command needed more than one try
+    - Fix: The toast is removed from the notification center once all the stations got the command
 - v2.5.2
     - Fix: Auto-updater download failed with "An exception occurred during a WebClient request" when BSManager is installed for all users (Program Files): the update is now downloaded to the temp folder and installed with an administrator prompt when needed. Copies already installed there must be updated manually once (or run BSManager as administrator and accept the update)
 - v2.5.1
